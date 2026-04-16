@@ -142,6 +142,72 @@
       padding: 32px 24px 64px;
     }
 
+    /* ====== TRADING PERFORMANCE ====== */
+    #perf-section {
+      margin-bottom: 28px;
+    }
+
+    .perf-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+    }
+    .perf-icon {
+      width: 26px; height: 26px;
+      background: linear-gradient(135deg, #f5c518, #f59e0b);
+      border-radius: 6px;
+      display: grid; place-items: center;
+      font-size: 12px; flex-shrink: 0;
+    }
+    .perf-title {
+      font-size: 13px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .perf-line { flex: 1; height: 1px; background: var(--border); }
+
+    #perf-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .perf-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 18px 20px;
+      display: flex; flex-direction: column; gap: 6px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .perf-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #f5c518, #f59e0b);
+      opacity: 0.7;
+    }
+    .perf-card:hover { border-color: var(--border-2); }
+
+    .perf-card-label {
+      font-size: 11px; font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.7px;
+    }
+    .perf-card-value {
+      font-size: 28px; font-weight: 800;
+      letter-spacing: -0.5px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .perf-card-value.neutral { color: var(--text); }
+    .perf-card-value.positive { color: var(--buy); }
+    .perf-card-value.negative { color: var(--sell); }
+
+    @media (max-width: 600px) {
+      #perf-bar { grid-template-columns: 1fr; }
+    }
+
     /* ====== STATS BAR ====== */
     #stats-bar {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -578,6 +644,29 @@
 <!-- ===== MAIN ===== -->
 <main>
 
+  <!-- Trading Performance -->
+  <section id="perf-section">
+    <div class="perf-header">
+      <div class="perf-icon">🏆</div>
+      <span class="perf-title">Trading Performance</span>
+      <div class="perf-line"></div>
+    </div>
+    <div id="perf-bar">
+      <div class="perf-card">
+        <span class="perf-card-label">Total Trade</span>
+        <span class="perf-card-value neutral" id="perf-total">—</span>
+      </div>
+      <div class="perf-card">
+        <span class="perf-card-label">Win Rate</span>
+        <span class="perf-card-value neutral" id="perf-winrate">—</span>
+      </div>
+      <div class="perf-card">
+        <span class="perf-card-label">Total Profit</span>
+        <span class="perf-card-value neutral" id="perf-profit">—</span>
+      </div>
+    </div>
+  </section>
+
   <!-- Stats Bar -->
   <div id="stats-bar">
     <div class="stat-card">
@@ -909,6 +998,36 @@
 
   // Initial load
   fetchSignals();
+
+  /* ───────────────────────────────────────────
+     TRADING PERFORMANCE
+  ─────────────────────────────────────────── */
+  async function fetchPerformance() {
+    try {
+      const res  = await fetch('/performance');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const totalEl   = document.getElementById('perf-total');
+      const winrateEl = document.getElementById('perf-winrate');
+      const profitEl  = document.getElementById('perf-profit');
+
+      totalEl.textContent = data.total_trade ?? '—';
+
+      const wr = data.winrate ?? null;
+      winrateEl.textContent = wr !== null ? wr + '%' : '—';
+      winrateEl.className = 'perf-card-value ' + (wr >= 50 ? 'positive' : wr !== null ? 'negative' : 'neutral');
+
+      const pr = data.total_profit ?? null;
+      profitEl.textContent = pr !== null ? (pr >= 0 ? '+' : '') + pr + '%' : '—';
+      profitEl.className = 'perf-card-value ' + (pr > 0 ? 'positive' : pr < 0 ? 'negative' : 'neutral');
+
+    } catch (e) {
+      console.warn('Performance fetch failed:', e);
+    }
+  }
+
+  fetchPerformance();
 
   /* ───────────────────────────────────────────
      TRADINGVIEW EMBED WIDGET

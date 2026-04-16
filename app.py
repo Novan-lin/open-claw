@@ -14,6 +14,7 @@ import sys
 import math
 import json
 import os
+import csv
 import importlib.util
 from datetime import datetime, timezone, timedelta
 
@@ -26,11 +27,13 @@ from data import get_stock_data
 from indicator import calculate_indicators
 from ai_analyst import generate_ai_analysis
 from scoring import calculate_score
+from strategies import multi_strategy_confirmation
 from volume_analysis import analyze_volume
 from gap_detector import detect_gap
 from stock_filter import is_stock_eligible
 from stock_list import get_lq45
 from entry_plan import generate_trade_plan
+from tuner import load_best_params
 
 # Muat signal.py secara dinamis (menghindari konflik dengan modul bawaan Python)
 spec = importlib.util.spec_from_file_location("local_signal", "signal.py")
@@ -39,12 +42,16 @@ sys.modules["local_signal"] = local_signal
 spec.loader.exec_module(local_signal)
 generate_signal = local_signal.generate_signal
 
+# Muat parameter terbaik (fallback ke RSI=14, MA 20/50 jika file belum ada)
+_BEST_PARAMS = load_best_params()
+
 # ============================================================
 # INISIALISASI FLASK
 # ============================================================
 app = Flask(__name__)
 
 SIGNALS_FILE = "signals.json"
+TRADES_CSV   = "trades.csv"
 DEFAULT_DASHBOARD_LIMIT = 5
 
 # ============================================================
@@ -147,8 +154,13 @@ def analyze_stock(ticker: str) -> dict | None:
                 "reason":  "Tidak memenuhi filter minimum (harga/volume)"
             }
 
-        # 2. Hitung indikator teknikal
-        indicators = calculate_indicators(df)
+        # 2. Hitung indikator teknikal dengan parameter terbaik
+        indicators = calculate_indicators(
+            df,
+            rsi_period=_BEST_PARAMS["rsi"],
+            ma_short=_BEST_PARAMS["ma_short"],
+            ma_long=_BEST_PARAMS["ma_long"],
+        )
         if indicators is None:
             return None
 
@@ -176,9 +188,18 @@ def analyze_stock(ticker: str) -> dict | None:
             gap_confidence=confidence,
         )
 
-        # 6. Hitung skor
+        # 6. Hitung skor + multi-strategy confirmation bonus
+        try:
+            mc = multi_strategy_confirmation(df)
+            mc_bonus  = mc["score_bonus"]
+            mc_signal = mc["signal"]
+        except Exception:
+            mc_bonus  = 0
+            mc_signal = "HOLD"
+
         score, alasan_skoring = calculate_score(
-            rsi, ma20, ma50, harga, smart_money, volume_label, gap_up, confidence
+            rsi, ma20, ma50, harga, smart_money, volume_label, gap_up, confidence,
+            multi_confirmation_bonus=mc_bonus,
         )
 
         entry = None
@@ -199,6 +220,9 @@ def analyze_stock(ticker: str) -> dict | None:
             ma20=ma20,
             ma50=ma50,
             harga=harga,
+            entry=entry,
+            tp=tp,
+            sl=sl,
         )
 
         return {
@@ -206,6 +230,7 @@ def analyze_stock(ticker: str) -> dict | None:
             "harga":       safe_float(harga, 2),
             "signal":      signal_status,
             "score":       score,
+            "multi_confirmation": mc_signal,
             "smart_money": smart_money,
             "gap_up":      gap_up,
             "entry":       safe_float(entry, 2),
@@ -295,6 +320,51 @@ def get_signals():
         "total":     0,
         "signals":   []
     })
+
+
+@app.route("/performance", methods=["GET"])
+def get_performance():
+    """
+    GET /performance
+    Hitung performa trading dari trades.csv.
+
+    Response JSON:
+    {
+        "total_trade": 10,
+        "winrate": 60.0,
+        "total_profit": 5.3
+    }
+    """
+    if not os.path.exists(TRADES_CSV):
+        return jsonify({"total_trade": 0, "winrate": 0.0, "total_profit": 0.0})
+
+    try:
+        total = 0
+        wins  = 0
+        total_profit = 0.0
+
+        with open(TRADES_CSV, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                total += 1
+                try:
+                    pct = float(row.get("profit_pct", 0) or 0)
+                except (ValueError, TypeError):
+                    pct = 0.0
+                total_profit += pct
+                if pct > 0:
+                    wins += 1
+
+        winrate = round((wins / total) * 100, 1) if total > 0 else 0.0
+
+        return jsonify({
+            "total_trade":  total,
+            "winrate":      winrate,
+            "total_profit": round(total_profit, 2),
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/", methods=["GET"])

@@ -1,0 +1,9 @@
+{
+    "rsi": 7,
+    "ma_short": 20,
+    "ma_long": 50,
+    "source_ticker": "BBCA",
+    "winrate": 0.0,
+    "total_return": 0.0,
+    "last_tuned": 1776351302.169679
+}

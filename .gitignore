@@ -1,0 +1,12 @@
+﻿# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Auto-generated runtime files
+signals.json
+last_signals.json
+bot_instance.lock
+
+# Sensitive / local config
+config.py

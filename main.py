@@ -11,6 +11,7 @@ from indicator import calculate_indicators
 from ai_analyst import generate_ai_analysis, generate_market_outlook
 from notifier import format_telegram_message, send_telegram_message
 from scoring import calculate_score
+from strategies import multi_strategy_confirmation
 from volume_analysis import analyze_volume
 from gap_detector import detect_gap
 from stock_filter import is_stock_eligible
@@ -18,6 +19,7 @@ from stock_list import get_stock_list
 from entry_plan import generate_trade_plan
 from risk_management import calculate_position_size
 from trade_logger import monitor_active_trades
+from tuner import load_best_params, auto_tune, BEST_PARAMS_FILE
 
 # Memuat signal.py secara dinamis 
 import importlib.util
@@ -83,6 +85,14 @@ def get_env_float(name, default):
 
 TRADE_CAPITAL = get_env_float("TRADE_CAPITAL", 10_000_000)
 RISK_PERCENT = get_env_float("RISK_PERCENT", 1)
+
+# Muat parameter terbaik dari best_params.json (fallback: RSI=14, MA 20/50)
+_BEST_PARAMS = load_best_params()
+print(f"[CONFIG] Parameter aktif: RSI={_BEST_PARAMS['rsi']} | "
+      f"MA({_BEST_PARAMS['ma_short']},{_BEST_PARAMS['ma_long']})")
+
+TUNE_INTERVAL_SECONDS = 7 * 24 * 3600  # 1x per minggu
+TUNE_TICKER = "BBCA.JK"                 # Saham acuan untuk auto-tune
 
 def save_signals_json(kumpulan_hasil: list):
     """
@@ -159,7 +169,13 @@ def analyze_stock(ticker):
         if not is_stock_eligible(df, ticker):
             return None
 
-        indicators = calculate_indicators(df)
+        # 2. Hitung indikator teknikal dengan parameter terbaik
+        indicators = calculate_indicators(
+            df,
+            rsi_period=_BEST_PARAMS["rsi"],
+            ma_short=_BEST_PARAMS["ma_short"],
+            ma_long=_BEST_PARAMS["ma_long"],
+        )
         if indicators is None:
             print(f"-> [SKIP] Gagal hitung teknikal.")
             return None
@@ -185,7 +201,19 @@ def analyze_stock(ticker):
             gap_up=gap_up,
             gap_confidence=confidence,
         )
-        score, alasan_skoring = calculate_score(rsi, ma20, ma50, harga, smart_money, volume_label, gap_up, confidence)
+        # Multi-strategy confirmation (bonus score jika 2+ strategi setuju)
+        try:
+            mc = multi_strategy_confirmation(df)
+            mc_bonus  = mc["score_bonus"]
+            mc_signal = mc["signal"]
+        except Exception:
+            mc_bonus  = 0
+            mc_signal = "HOLD"
+
+        score, alasan_skoring = calculate_score(
+            rsi, ma20, ma50, harga, smart_money, volume_label, gap_up, confidence,
+            multi_confirmation_bonus=mc_bonus,
+        )
 
         entry = None
         tp = None
@@ -210,7 +238,7 @@ def analyze_stock(ticker):
         
         rsi_display = f"{rsi:.2f}" if rsi is not None and not math.isnan(rsi) else "N/A"
         print(f"Harga: {harga:.2f} | RSI: {rsi_display}")
-        print(f"Sinyal: {signal_status} | Skor: {score}")
+        print(f"Sinyal: {signal_status} | Skor: {score} | Multi-Conf: {mc_signal}")
 
         # Minta analisis AI (Ollama - Mistral)
         print(f"-> [AI] Menghasilkan analisis untuk {clean_ticker}...")
@@ -220,7 +248,10 @@ def analyze_stock(ticker):
             rsi=rsi,
             ma20=ma20,
             ma50=ma50,
-            harga=harga
+            harga=harga,
+            entry=entry,
+            tp=tp,
+            sl=sl,
         )
         
         return {
@@ -231,6 +262,7 @@ def analyze_stock(ticker):
             "ma50": ma50,
             "signal": signal_status,
             "score": score,
+            "multi_confirmation": mc_signal,
             "alasan": alasan_skoring,
             "current_volume": current_volume,
             "avg_volume": avg_volume,
@@ -301,6 +333,29 @@ def main():
             print(">>> Mode dashboard aktif: analisa tetap di-update, Telegram tidak dikirim.")
         else:
             print("\n>>> INFO: Market buka. Analisa dan Telegram aktif.")
+
+        # --- AUTO-TUNE BERKALA (1x per minggu) ---
+        try:
+            _last_tuned = 0.0
+            if os.path.exists(BEST_PARAMS_FILE):
+                with open(BEST_PARAMS_FILE, "r", encoding="utf-8") as _f:
+                    _last_tuned = float(json.load(_f).get("last_tuned", 0.0))
+        except Exception:
+            _last_tuned = 0.0
+
+        if time.time() - _last_tuned >= TUNE_INTERVAL_SECONDS:
+            print("\n" + "="*60)
+            print("  Updating strategy parameters...")
+            print("="*60)
+            try:
+                auto_tune(TUNE_TICKER, top_n=3)
+                _BEST_PARAMS.update(load_best_params())
+                print(f"  [AUTO-TUNE] Selesai. Parameter aktif sekarang: "
+                      f"RSI={_BEST_PARAMS['rsi']} | "
+                      f"MA({_BEST_PARAMS['ma_short']},{_BEST_PARAMS['ma_long']})")
+            except Exception as _tune_err:
+                print(f"  [AUTO-TUNE] Gagal: {_tune_err}")
+            print("="*60)
 
         should_scan = True
 

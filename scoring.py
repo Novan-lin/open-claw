@@ -1,8 +1,14 @@
 import math
 
-def calculate_score(rsi, ma20, ma50, price, smart_money=False, label="NORMAL", gap_up=False, confidence="LOW"):
+
+def calculate_score(rsi, ma20, ma50, price, smart_money=False, label="NORMAL", gap_up=False, confidence="LOW",
+                    multi_confirmation_bonus=0):
     """
     Menghitung besaran skor berdasarkan kekuatan sinyal teknikal dan perilaku aliran dana.
+
+    Args:
+        multi_confirmation_bonus : Bonus poin dari multi_strategy_confirmation().
+                                   +2 untuk STRONG BUY/SELL, +1 untuk WEAK BUY/SELL.
     """
     score = 0
     alasan = []
@@ -44,6 +50,12 @@ def calculate_score(rsi, ma20, ma50, price, smart_money=False, label="NORMAL", g
             score += 1
             alasan.append("Gap Up tingkat keyakinan TINGGI")
 
+    # --- 6. Multi-Strategy Confirmation Bonus ---
+    if multi_confirmation_bonus > 0:
+        score += multi_confirmation_bonus
+        label_bonus = "STRONG" if multi_confirmation_bonus >= 2 else "WEAK"
+        alasan.append(f"Multi-Strategy {label_bonus} confirmation (+{multi_confirmation_bonus})")
+
     # --- Print hasil untuk debugging ---
     print("\n--- DEBUG SCORING ---")
     
@@ -54,6 +66,7 @@ def calculate_score(rsi, ma20, ma50, price, smart_money=False, label="NORMAL", g
     print(f"Input   : RSI={f_rsi}, MA20={f_ma20}, MA50={f_ma50}, Price={price:.2f}")
     print(f"Volume  : Smart Money={smart_money}, Label={label}")
     print(f"Momentum: Gap Up={gap_up}, Confidence={confidence}")
+    print(f"Multi-Conf Bonus: +{multi_confirmation_bonus}")
     print(f"Skor Final: {score}")
     print("Detail Poin:")
     if alasan:

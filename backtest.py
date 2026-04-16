@@ -41,29 +41,39 @@ from gap_detector import detect_gap
 # ════════════════════════════════════════════════════════════
 # HELPER: HITUNG INDIKATOR PER BARIS (tanpa print noise)
 # ════════════════════════════════════════════════════════════
-def _calc_indicators_silent(df_slice: pd.DataFrame) -> dict | None:
+def _calc_indicators_silent(
+    df_slice: pd.DataFrame,
+    rsi_period: int = 14,
+    ma_short: int = 20,
+    ma_long: int = 50,
+) -> dict | None:
     """
-    Hitung RSI(14), MA20, MA50 dari slice DataFrame.
+    Hitung RSI, MA-short, dan MA-long dari slice DataFrame.
+    Parameter periode bisa dikustomisasi.
     Kembalikan dict atau None jika data tidak mencukupi.
     """
-    if df_slice is None or len(df_slice) < 15:
+    min_rows = max(rsi_period, ma_long) + 1
+    if df_slice is None or len(df_slice) < min_rows:
         return None
     try:
         close = df_slice["Close"]
-        rsi   = RSIIndicator(close=close, window=14).rsi().iloc[-1]
-        ma20  = SMAIndicator(close=close, window=20).sma_indicator().iloc[-1]
-        ma50  = SMAIndicator(close=close, window=50).sma_indicator().iloc[-1]
+        rsi      = RSIIndicator(close=close, window=rsi_period).rsi().iloc[-1]
+        ma_s_val = SMAIndicator(close=close, window=ma_short).sma_indicator().iloc[-1]
+        ma_l_val = SMAIndicator(close=close, window=ma_long).sma_indicator().iloc[-1]
         return {
-            "rsi":         float(rsi)   if pd.notna(rsi)  else float("nan"),
-            "ma20":        float(ma20)  if pd.notna(ma20) else float("nan"),
-            "ma50":        float(ma50)  if pd.notna(ma50) else float("nan"),
+            "rsi":         float(rsi)      if pd.notna(rsi)      else float("nan"),
+            "ma20":        float(ma_s_val) if pd.notna(ma_s_val) else float("nan"),
+            "ma50":        float(ma_l_val) if pd.notna(ma_l_val) else float("nan"),
             "close_price": float(close.iloc[-1]),
         }
     except Exception:
         return None
 
 
-def _generate_signal_silent(rsi, ma20, ma50, harga, smart_money=False, gap_confidence="LOW") -> str:
+def _generate_signal_silent(
+    rsi, ma_short_val, ma_long_val, harga,
+    smart_money=False, gap_confidence="LOW",
+) -> str:
     """
     Tentukan sinyal BUY/SELL/HOLD tanpa print ke terminal.
     Menggunakan logika yang sama dengan signal.py.
@@ -74,11 +84,11 @@ def _generate_signal_silent(rsi, ma20, ma50, harga, smart_money=False, gap_confi
         return "SELL"
 
     valid_ma = (
-        ma20 is not None and ma50 is not None
-        and not math.isnan(ma20) and not math.isnan(ma50)
+        ma_short_val is not None and ma_long_val is not None
+        and not math.isnan(ma_short_val) and not math.isnan(ma_long_val)
     )
     gap_ok = str(gap_confidence).upper() in {"MEDIUM", "HIGH"}
-    if 35 <= rsi <= 60 and valid_ma and ma20 > ma50 and smart_money and gap_ok:
+    if 35 <= rsi <= 60 and valid_ma and ma_short_val > ma_long_val and smart_money and gap_ok:
         return "BUY"
 
     return "HOLD"
@@ -110,14 +120,21 @@ def _detect_gap_silent(rsi, ma20, ma50, price_today, price_yesterday, smart_mone
 # ════════════════════════════════════════════════════════════
 # FUNGSI UTAMA: run_backtest
 # ════════════════════════════════════════════════════════════
-def run_backtest(ticker: str) -> list[dict]:
+def run_backtest(
+    ticker: str,
+    rsi_period: int = 14,
+    ma_short: int = 20,
+    ma_long: int = 50,
+) -> list[dict]:
     """
-    Jalankan backtest sinyal BUY untuk satu ticker.
+    Jalankan backtest sinyal BUY untuk satu ticker dengan parameter dinamis.
 
     Parameters
     ----------
-    ticker : str
-        Kode saham, contoh "BBCA.JK"
+    ticker     : str   — Kode saham, contoh "BBCA.JK"
+    rsi_period : int   — Periode RSI. Default 14.
+    ma_short   : int   — Periode MA cepat. Default 20.
+    ma_long    : int   — Periode MA lambat. Default 50.
 
     Returns
     -------
@@ -164,21 +181,23 @@ def run_backtest(ticker: str) -> list[dict]:
     df["Date"] = pd.to_datetime(df["Date"]).dt.date
     print(f"  [OK] {len(df)} hari data tersedia ({df['Date'].iloc[0]} → {df['Date'].iloc[-1]})")
 
-    # ── 2. Loop mulai hari ke-50 ──────────────────────────────
-    trades    = []
+    # ── 2. Loop mulai dari hari yang cukup untuk semua indikator ──
+    trades     = []
     total_days = len(df)
-    START_IDX  = 50   # butuh 50 hari sebelumnya untuk MA50 valid
+    START_IDX  = max(rsi_period, ma_long) + 1
 
     print(f"\n  [2] Scanning sinyal BUY dari hari ke-{START_IDX+1} hingga {total_days-1}...")
+    print(f"      RSI={rsi_period} | MA_short={ma_short} | MA_long={ma_long}")
     print(f"      (Hari terakhir tidak masuk karena tidak ada Open besok)\n")
 
     for i in range(START_IDX, total_days - 1):
         # Slice data s/d hari i (inklusif) — simulasi "tidak tahu masa depan"
-        df_slice    = df.iloc[: i + 1].copy()
-        df_slice    = df_slice.set_index("Date")
+        df_slice = df.iloc[: i + 1].copy()
+        df_slice = df_slice.set_index("Date")
 
-        # ── Hitung indikator ──
-        ind = _calc_indicators_silent(df_slice)
+        # ── Hitung indikator dengan parameter dinamis ──
+        ind = _calc_indicators_silent(df_slice, rsi_period=rsi_period,
+                                      ma_short=ma_short, ma_long=ma_long)
         if ind is None:
             continue
 
@@ -224,6 +243,11 @@ def run_backtest(ticker: str) -> list[dict]:
                 "ma50":          round(ma50, 2) if not math.isnan(ma50) else None,
                 "smart_money":   smart_money,
                 "gap_up":        gap_up,
+                "params": {
+                    "rsi_period": rsi_period,
+                    "ma_short":   ma_short,
+                    "ma_long":    ma_long,
+                },
             }
             trades.append(trade)
 
@@ -296,6 +320,67 @@ def calculate_performance(trades: list[dict]) -> dict:
         "best_trade":    max(pl_list),
         "worst_trade":   min(pl_list),
         "equity_curve":  equity_curve,
+    }
+
+
+# ════════════════════════════════════════════════════════════
+# BACKTEST DENGAN PARAMETER DINAMIS
+# ════════════════════════════════════════════════════════════
+def run_backtest_with_params(
+    ticker: str,
+    rsi_period: int = 14,
+    ma_short: int = 20,
+    ma_long: int = 50,
+) -> dict:
+    """
+    Jalankan backtest dengan parameter dinamis dan kembalikan ringkasan performa.
+
+    Args:
+        ticker     : Kode saham, contoh "BBCA.JK"
+        rsi_period : Periode RSI. Default 14.
+        ma_short   : Periode MA cepat. Default 20.
+        ma_long    : Periode MA lambat. Default 50.
+
+    Returns:
+        {
+            "ticker":       str,
+            "params":       {"rsi_period": int, "ma_short": int, "ma_long": int},
+            "total_trade":  int,
+            "winrate":      float,   # dalam %
+            "total_return": float,   # dalam %
+            "trades":       list[dict],
+        }
+
+    Raises:
+        ValueError: Jika ma_short >= ma_long.
+    """
+    if ma_short >= ma_long:
+        raise ValueError(
+            f"ma_short ({ma_short}) harus lebih kecil dari ma_long ({ma_long})."
+        )
+
+    trades = run_backtest(ticker, rsi_period=rsi_period,
+                          ma_short=ma_short, ma_long=ma_long)
+
+    if not trades:
+        return {
+            "ticker":       ticker.split(".")[0],
+            "params":       {"rsi_period": rsi_period, "ma_short": ma_short, "ma_long": ma_long},
+            "total_trade":  0,
+            "winrate":      0.0,
+            "total_return": 0.0,
+            "trades":       [],
+        }
+
+    perf = calculate_performance(trades)
+
+    return {
+        "ticker":       ticker.split(".")[0],
+        "params":       {"rsi_period": rsi_period, "ma_short": ma_short, "ma_long": ma_long},
+        "total_trade":  perf["total_trade"],
+        "winrate":      round(perf["win_rate"], 2),
+        "total_return": round(perf["total_return"], 2),
+        "trades":       trades,
     }
 
 

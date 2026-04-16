@@ -1,7 +1,8 @@
 import requests
 import math
 
-def generate_ai_analysis(ticker, signal, rsi, ma20, ma50, harga):
+def generate_ai_analysis(ticker, signal, rsi, ma20, ma50, harga,
+                         entry=None, tp=None, sl=None):
     """
     Meminta analisis teknikal singkat kepada AI lokal (Ollama - mistral).
     Mengembalikan string hasil analisis.
@@ -10,8 +11,28 @@ def generate_ai_analysis(ticker, signal, rsi, ma20, ma50, harga):
     ma20_str = f"{ma20:.2f}" if (ma20 is not None and not math.isnan(ma20)) else "N/A"
     ma50_str = f"{ma50:.2f}" if (ma50 is not None and not math.isnan(ma50)) else "N/A"
     rsi_str = f"{rsi:.2f}" if (rsi is not None and not math.isnan(rsi)) else "N/A"
-    
-    # Prompt sesuai instruksi kriteria
+
+    # Susun baris entry plan jika tersedia
+    if entry is not None and tp is not None and sl is not None:
+        try:
+            rr = (float(tp) - float(entry)) / (float(entry) - float(sl))
+            entry_block = (
+                f"* Entry : {entry:.2f}\n"
+                f"* TP    : {tp:.2f}\n"
+                f"* SL    : {sl:.2f}\n"
+                f"* RR    : 1:{rr:.1f}\n"
+            )
+            entry_instruction = (
+                "Komentari apakah level entry, TP, dan SL tersebut masuk akal "
+                "berdasarkan kondisi teknikal di atas (1 kalimat)."
+            )
+        except Exception:
+            entry_block = ""
+            entry_instruction = ""
+    else:
+        entry_block = ""
+        entry_instruction = ""
+
     prompt = f"""Kamu adalah analis saham profesional.
 
 Data:
@@ -21,9 +42,10 @@ Data:
 * MA20: {ma20_str}
 * MA50: {ma50_str}
 * Sinyal: {signal}
-
+{entry_block}
 Tugas:
-Berikan analisa maksimal 2 kalimat, profesional."""
+Berikan analisa maksimal 2 kalimat, profesional.
+{entry_instruction}"""
 
     # Set up request payload 
     url = "http://localhost:11434/api/generate"
