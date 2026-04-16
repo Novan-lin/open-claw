@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analisa Saham — Stock Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0a0d14;
+      --surface:    #111520;
+      --surface-2:  #181e2e;
+      --border:     rgba(255,255,255,0.07);
+      --border-2:   rgba(255,255,255,0.12);
+      --buy:        #00d97e;
+      --buy-dim:    rgba(0, 217, 126, 0.12);
+      --sell:       #ff4d6d;
+      --sell-dim:   rgba(255, 77, 109, 0.12);
+      --hold:       #6c7af0;
+      --hold-dim:   rgba(108, 122, 240, 0.12);
+      --accent:     #6c7af0;
+      --accent-dim: rgba(108, 122, 240, 0.15);
+      --gold:       #f5c518;
+      --text:       #e2e8f0;
+      --text-muted: #64748b;
+      --text-dim:   #94a3b8;
+      --radius:     16px;
+      --radius-sm:  10px;
+      --shadow:     0 4px 32px rgba(0,0,0,0.5);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 15% 20%, rgba(108,122,240,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 35% at 85% 75%, rgba(0,217,126,0.05) 0%, transparent 60%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ====== TOPBAR ====== */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,13,20,0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+    }
+    .topbar-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      height: 60px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .back-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      width: 38px; height: 38px;
+      cursor: pointer;
+      font-size: 18px;
+      display: grid; place-items: center;
+      transition: all 0.2s;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .back-btn:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .topbar-ticker {
+      font-size: 22px; font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.5px;
+    }
+    .badge-signal {
+      padding: 5px 14px;
+      border-radius: 50px;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .badge-signal.BUY  { background: var(--buy-dim);  color: var(--buy); }
+    .badge-signal.SELL { background: var(--sell-dim); color: var(--sell); }
+    .badge-signal.HOLD { background: var(--hold-dim); color: var(--hold); }
+    .topbar-right {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .topbar-score {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px; font-weight: 700;
+    }
+    .refresh-group {
+      display: flex; align-items: center; gap: 8px;
+      margin-left: 8px;
+    }
+    .refresh-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      height: 34px; padding: 0 14px;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .refresh-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .refresh-btn.loading {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+    .refresh-btn .spin {
+      display: inline-block;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .countdown-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .last-update {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ====== LAYOUT ====== */
+    .page-content {
+      position: relative; z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 24px 64px;
+    }
+
+    /* Two-column layout: chart left, info right */
+    .top-grid {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 900px) {
+      .top-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ====== CHART ====== */
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      min-height: 480px;
+    }
+    .chart-toolbar {
+      display: flex; align-items: center;
+      gap: 6px; padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .interval-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; font-weight: 600;
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .interval-btn:hover { border-color: var(--accent); color: var(--text); }
+    .interval-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .chart-frame {
+      width: 100%;
+      height: 440px;
+    }
+    .chart-frame iframe {
+      width: 100%; height: 100%; border: none;
+    }
+
+    /* ====== SIDEBAR INFO ====== */
+    .info-sidebar {
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .info-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 18px;
+    }
+    .info-card-title {
+      font-size: 10px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .info-stat {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .info-stat .label {
+      display: block;
+      font-size: 9px; font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .info-stat .value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px; font-weight: 700;
+    }
+    .info-stat.full { grid-column: 1 / -1; }
+
+    /* Trade plan colors */
+    .tp-val { color: var(--buy); }
+    .sl-val { color: var(--sell); }
+
+    /* Feature badges */
+    .feat-badge {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      margin-bottom: 6px;
+    }
+    .feat-badge.sm-on {
+      background: rgba(245,197,24,0.08);
+      border-color: rgba(245,197,24,0.3);
+      color: #f5c518;
+    }
+    .feat-badge.gap-on {
+      background: rgba(0,217,126,0.08);
+      border-color: rgba(0,217,126,0.3);
+      color: var(--buy);
+    }
+    .feat-badge.off { opacity: 0.4; color: var(--text-muted); }
+
+    /* ====== SECTIONS ====== */
+    .section {
+      margin-bottom: 28px;
+    }
+    .section-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 13px; font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .section-line { flex: 1; height: 1px; background: var(--border); }
+
+    /* ====== AI ANALYSIS BOX ====== */
+    .ai-box {
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius);
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .ai-box::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), #00d97e);
+    }
+    .ai-content {
+      font-size: 15px;
+      line-height: 2;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .ai-section-header {
+      color: var(--accent);
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      margin-top: 16px;
+      white-space: normal;
+    }
+    .ai-section-label {
+      font-size: 16px;
+      font-weight: 800;
+      padding: 8px 0 4px;
+      white-space: normal;
+    }
+    .ai-section-label.ai-teknikal { color: var(--accent); }
+    .ai-section-label.ai-fundamental { color: var(--buy); }
+
+    /* ====== REASON TAGS ====== */
+    .reason-tags {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .reason-tag {
+      font-size: 12px; font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .reason-tag.positive {
+      background: var(--buy-dim);
+      border-color: rgba(0,217,126,0.25);
+      color: var(--buy);
+    }
+    .reason-tag.negative {
+      background: var(--sell-dim);
+      border-color: rgba(255,77,109,0.25);
+      color: var(--sell);
+    }
+
+    /* ====== SM BOX ====== */
+    .sm-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      font-size: 14px;
+      line-height: 1.9;
+      color: var(--text-dim);
+    }
+
+    /* ====== MTF ====== */
+    .mtf-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-size: 13px; font-weight: 700;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text-muted);
+    }
+    .mtf-badge.mtf-strong-buy  { background: var(--buy-dim); border-color: rgba(0,217,126,0.35); color: var(--buy); }
+    .mtf-badge.mtf-buy         { background: rgba(0,217,126,0.08); border-color: rgba(0,217,126,0.2); color: var(--buy); }
+    .mtf-badge.mtf-strong-sell { background: var(--sell-dim); border-color: rgba(255,77,109,0.35); color: var(--sell); }
+    .mtf-badge.mtf-sell        { background: rgba(255,77,109,0.08); border-color: rgba(255,77,109,0.2); color: var(--sell); }
+    .mtf-badge.mtf-conflict    { background: rgba(245,197,24,0.1); border-color: rgba(245,197,24,0.3); color: var(--gold); }
+    .mtf-badge.mtf-neutral     { background: var(--accent-dim); border-color: rgba(108,122,240,0.2); color: var(--accent); }
+
+    .mtf-tf-row {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 8px; align-items: center;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .mtf-tf-label {
+      font-size: 11px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .mtf-tf-details {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .mtf-tf-details span { color: var(--text-dim); }
+    .mtf-bias-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 10px; font-weight: 700;
+    }
+    .mtf-bias-tag.bull { background: var(--buy-dim); color: var(--buy); }
+    .mtf-bias-tag.bear { background: var(--sell-dim); color: var(--sell); }
+    .mtf-bias-tag.neut { background: var(--accent-dim); color: var(--accent); }
+
+    .mtf-summary {
+      margin-top: 10px;
+      font-size: 13px; line-height: 1.7;
+      color: var(--text-dim);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    /* ====== LOADING & ERROR ====== */
+    .state-block {
+      text-align: center;
+      padding: 80px 24px;
+      color: var(--text-muted);
+    }
+    .state-block .emoji { font-size: 40px; margin-bottom: 16px; }
+    .state-block p { font-size: 14px; line-height: 1.7; }
+
+    .skeleton { animation: shimmer 1.6s infinite; }
+    @keyframes shimmer {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.4s ease both; }
+
+    /* ====== SCROLLBAR ====== */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="/" class="back-btn" title="Kembali ke Dashboard">&larr;</a>
+    <span class="topbar-ticker" id="top-ticker">—</span>
+    <span class="badge-signal" id="top-badge">—</span>
+    <div class="topbar-right">
+      <span class="topbar-score" id="top-score"></span>
+      <div class="refresh-group">
+        <button class="refresh-btn" id="refresh-btn" onclick="manualRefresh()" title="Refresh data">
+          <span id="refresh-icon">🔄</span> Refresh
+        </button>
+        <span class="countdown-label" id="countdown-label"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="page-content" id="page-content">
+  <div class="state-block skeleton" id="loading-state">
+    <div class="emoji">⏳</div>
+    <p>Memuat data analisis saham...</p>
+  </div>
+</div>
+
+<script>
+  // Extract ticker from URL: /analysis/BBCA -> BBCA
+  const pathParts = window.location.pathname.split('/');
+  const TICKER = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2] || '';
+
+  if (!TICKER) {
+    document.getElementById('page-content').innerHTML = `
+      <div class="state-block">
+        <div class="emoji">⚠️</div>
+        <p>Ticker tidak ditemukan di URL.</p>
+        <p style="margin-top:12px;"><a href="/" style="color:var(--accent);text-decoration:none;font-weight:600;">← Kembali ke Dashboard</a></p>
+      </div>`;
+  }
+
+  document.title = `${TICKER} — Analisa Saham`;
+
+  function formatPrice(v) {
+    if (v == null) return '—';
+    return 'Rp ' + Number(v).toLocaleString('id-ID');
+  }
+
+  // ====== CHART ======
+  let currentInterval = 'D';
+
+  function buildChart(interval) {
+    currentInterval = interval;
+    document.querySelectorAll('.interval-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.interval === interval);
+    });
+    const symbol = 'IDX:' + TICKER;
+    const src = 'https://s.tradingview.com/widgetembed/?' +
+      'symbol=' + encodeURIComponent(symbol) +
+      '&interval=' + encodeURIComponent(interval) +
+      '&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=131722' +
+      '&studies=RSI%40tv-basicstudies&studies=MASimple%40tv-basicstudies' +
+      '&theme=dark&style=1&timezone=Asia%2FJakarta&locale=id&utm_source=localhost';
+    const frame = document.getElementById('chart-frame');
+    if (frame) {
+      frame.innerHTML = '<iframe src="' + src + '" allowtransparency="true" allowfullscreen></iframe>';
+    }
+  }
+
+  // ====== MTF BUILDER ======
+  function buildMtfHTML(mtf) {
+    if (!mtf || mtf.confluence === 'NO_DATA') return '';
+
+    const confClsMap = { 'STRONG_BUY': 'mtf-strong-buy', 'BUY': 'mtf-buy', 'STRONG_SELL': 'mtf-strong-sell', 'SELL': 'mtf-sell', 'CONFLICT': 'mtf-conflict', 'NEUTRAL': 'mtf-neutral' };
+    const confLblMap = { 'STRONG_BUY': '⬆⬆ Strong Buy', 'BUY': '⬆ Buy', 'STRONG_SELL': '⬇⬇ Strong Sell', 'SELL': '⬇ Sell', 'CONFLICT': '⚠ Conflict', 'NEUTRAL': '⏸ Neutral' };
+    const confCls = confClsMap[mtf.confluence] || 'mtf-neutral';
+    const confLbl = confLblMap[mtf.confluence] || mtf.confluence;
+
+    function tfRow(key, label) {
+      const tf = mtf[key];
+      if (!tf || tf.status !== 'ok') return `
+        <div class="mtf-tf-row">
+          <div class="mtf-tf-label">${label}</div>
+          <div class="mtf-tf-details"><span style="color:var(--text-muted)">Data tidak tersedia</span></div>
+        </div>`;
+      const biasCls = tf.bias === 'BULLISH' ? 'bull' : tf.bias === 'BEARISH' ? 'bear' : 'neut';
+      return `
+        <div class="mtf-tf-row">
+          <div class="mtf-tf-label">${label}</div>
+          <div class="mtf-tf-details">
+            <span>RSI ${tf.rsi ?? '—'}</span>
+            <span>MA20 ${tf.ma20 ?? '—'}</span>
+            <span>MA50 ${tf.ma50 ?? '—'}</span>
+            <span class="mtf-bias-tag ${biasCls}">${tf.bias}</span>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="section fade-in">
+        <div class="section-header">
+          <span class="section-title">📊 Multi-Timeframe Analysis</span>
+          <div class="section-line"></div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <span class="mtf-badge ${confCls}">${confLbl}</span>
+          <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">Score: ${mtf.confluence_score ?? 0}</span>
+        </div>
+        ${tfRow('weekly', 'Weekly')}
+        ${tfRow('daily', 'Daily')}
+        ${tfRow('intraday', '1 Hour')}
+        ${mtf.summary ? `<div class="mtf-summary">💡 ${mtf.summary}</div>` : ''}
+      </div>`;
+  }
+
+  // ====== RENDER ======
+  function renderPage(s) {
+    const sig     = s.signal || 'HOLD';
+    const sigClass = sig === 'BUY' ? 'BUY' : sig === 'SELL' ? 'SELL' : 'HOLD';
+    const sm      = s.smart_money === true;
+    const gap     = s.gap_up === true;
+    const rsi     = s._meta?.rsi != null ? Number(s._meta.rsi).toFixed(2) : '—';
+    const ma20    = s._meta?.ma20 != null ? Number(s._meta.ma20).toFixed(2) : '—';
+    const ma50    = s._meta?.ma50 != null ? Number(s._meta.ma50).toFixed(2) : '—';
+    const score   = s.score ?? 0;
+    const ai      = s.ai_analysis || s.ai || '—';
+
+    // Format AI text: highlight section headers
+    function formatAI(text) {
+      if (!text || text === '—') return '—';
+      return text
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^(══+.*)$/gm, '<div class="ai-section-header">$1</div>')
+        .replace(/^(📊.*\[.*\])$/gm, '<div class="ai-section-label ai-teknikal">$1</div>')
+        .replace(/^(📈.*\[.*\])$/gm, '<div class="ai-section-label ai-fundamental">$1</div>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    }
+    const aiFormatted = formatAI(ai);
+    const smLabel = s._meta?.volume_label || (sm ? 'AKTIF' : 'TIDAK');
+    const smConf  = s._meta?.sm_confidence != null ? (s._meta.sm_confidence * 100).toFixed(0) + '%' : '—';
+    const guConf  = s._meta?.gap_confidence || '—';
+    const alasan  = s._meta?.alasan || '—';
+    const smAlasan = s._meta?.sm_alasan || '—';
+    const hargaV  = s.harga ?? s.price ?? null;
+    const rsiVal  = s._meta?.rsi != null ? Number(s._meta.rsi) : null;
+
+    // MA analysis
+    const ma20v = s._meta?.ma20 != null ? Number(s._meta.ma20) : null;
+    const ma50v = s._meta?.ma50 != null ? Number(s._meta.ma50) : null;
+    const trendNote = (ma20v && ma50v) ? (ma20v > ma50v ? '📈 Uptrend (MA20 > MA50)' : '📉 Downtrend (MA20 < MA50)') : '—';
+    const trendColor = (ma20v && ma50v) ? (ma20v > ma50v ? 'var(--buy)' : 'var(--sell)') : 'var(--text-muted)';
+
+    // Topbar
+    document.getElementById('top-ticker').textContent = s.ticker || TICKER;
+    const badge = document.getElementById('top-badge');
+    badge.textContent = sig;
+    badge.className = 'badge-signal ' + sigClass;
+    const scoreColor = score >= 6 ? 'var(--buy)' : score >= 4 ? '#f59e0b' : 'var(--text-muted)';
+    document.getElementById('top-score').innerHTML = `Score <span style="color:${scoreColor}">${score}</span>/8`;
+
+    // Alasan tags
+    const alasanArr = Array.isArray(alasan) ? alasan : (typeof alasan === 'string' && alasan !== '—' ? [alasan] : []);
+    const alasanHTML = alasanArr.length > 0
+      ? `<div class="reason-tags">${alasanArr.map(a => {
+          const lower = a.toLowerCase();
+          const cls = (lower.includes('overbought') || lower.includes('bearish') || lower.includes('di bawah')) ? 'negative'
+                    : (lower.includes('uptrend') || lower.includes('smart money') || lower.includes('gap up') || lower.includes('bullish') || lower.includes('di atas') || lower.includes('oversold') || lower.includes('confirmation')) ? 'positive'
+                    : '';
+          return `<span class="reason-tag ${cls}">${a}</span>`;
+        }).join('')}</div>`
+      : `<p style="color:var(--text-muted);font-size:13px;">Tidak ada alasan scoring.</p>`;
+
+    // Trade plan sidebar
+    let tradePlanHTML = '';
+    if (s.entry != null && s.tp != null && s.sl != null) {
+      tradePlanHTML = `
+        <div class="info-card">
+          <div class="info-card-title">💰 Trade Plan</div>
+          <div class="info-grid">
+            <div class="info-stat"><span class="label">Entry</span><span class="value">${formatPrice(s.entry)}</span></div>
+            <div class="info-stat"><span class="label">Take Profit</span><span class="value tp-val">${formatPrice(s.tp)}</span></div>
+            <div class="info-stat"><span class="label">Stop Loss</span><span class="value sl-val">${formatPrice(s.sl)}</span></div>
+            ${s.lot != null ? `<div class="info-stat"><span class="label">Lot</span><span class="value">${s.lot}</span></div>` : ''}
+          </div>
+          ${s.risk_amount != null ? `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">Risk: ${formatPrice(s.risk_amount)}</div>` : ''}
+        </div>`;
+    }
+
+    // Build page
+    document.getElementById('page-content').innerHTML = `
+      <!-- TOP GRID: Chart + Sidebar -->
+      <div class="top-grid fade-in">
+        <!-- Chart -->
+        <div class="chart-card">
+          <div class="chart-toolbar">
+            <button class="interval-btn" data-interval="15" onclick="buildChart('15')">15m</button>
+            <button class="interval-btn" data-interval="60" onclick="buildChart('60')">1H</button>
+            <button class="interval-btn active" data-interval="D" onclick="buildChart('D')">1D</button>
+            <button class="interval-btn" data-interval="W" onclick="buildChart('W')">1W</button>
+            <button class="interval-btn" data-interval="M" onclick="buildChart('M')">1M</button>
+          </div>
+          <div class="chart-frame" id="chart-frame"></div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="info-sidebar">
+          <!-- Harga & Signal -->
+          <div class="info-card">
+            <div class="info-card-title">📋 Info Saham</div>
+            <div style="font-size:28px;font-weight:800;font-family:'JetBrains Mono',monospace;margin-bottom:12px;">${formatPrice(hargaV)}</div>
+            <div class="info-grid">
+              <div class="info-stat">
+                <span class="label">RSI (14)</span>
+                <span class="value" style="color:${rsiVal != null ? (rsiVal > 70 ? 'var(--sell)' : rsiVal < 30 ? 'var(--buy)' : 'var(--text)') : 'var(--text)'}">${rsi} ${rsiVal != null ? (rsiVal > 70 ? '⚠️' : rsiVal < 30 ? '✅' : '') : ''}</span>
+              </div>
+              <div class="info-stat"><span class="label">Score</span><span class="value" style="color:${scoreColor}">${score}/8</span></div>
+              <div class="info-stat"><span class="label">MA20</span><span class="value">${ma20}</span></div>
+              <div class="info-stat"><span class="label">MA50</span><span class="value">${ma50}</span></div>
+              <div class="info-stat full"><span class="label">Trend</span><span class="value" style="color:${trendColor};font-size:12px;">${trendNote}</span></div>
+            </div>
+          </div>
+
+          <!-- Feature badges -->
+          <div class="info-card" style="padding:14px 18px;">
+            <div class="feat-badge ${sm ? 'sm-on' : 'off'}">
+              ${sm ? `🔥 Smart Money · ${smLabel} · ${smConf}` : '— Smart Money'}
+            </div>
+            <div class="feat-badge ${gap ? 'gap-on' : 'off'}">
+              ${gap ? `🚀 Gap Up · ${guConf}` : '— Gap Up'}
+            </div>
+          </div>
+
+          ${tradePlanHTML}
+        </div>
+      </div>
+
+      <!-- AI ANALYSIS (FULL, no truncation) -->
+      <div class="section fade-in" style="animation-delay:0.1s;">
+        <div class="section-header">
+          <span class="section-title">🤖 Analisa AI Lengkap</span>
+          <div class="section-line"></div>
+        </div>
+        <div class="ai-box">
+          <div class="ai-content">${aiFormatted}</div>
+        </div>
+      </div>
+
+      <!-- ALASAN SCORING -->
+      <div class="section fade-in" style="animation-delay:0.15s;">
+        <div class="section-header">
+          <span class="section-title">🏷️ Alasan Scoring</span>
+          <div class="section-line"></div>
+        </div>
+        ${alasanHTML}
+      </div>
+
+      <!-- SMART MONEY ANALYSIS -->
+      ${smAlasan !== '—' ? `
+      <div class="section fade-in" style="animation-delay:0.2s;">
+        <div class="section-header">
+          <span class="section-title">🔥 Smart Money Analysis</span>
+          <div class="section-line"></div>
+        </div>
+        <div class="sm-box">${smAlasan}</div>
+      </div>` : ''}
+
+      <!-- MTF -->
+      ${buildMtfHTML(s._meta?.mtf)}
+
+      <!-- Back to dashboard -->
+      <div style="text-align:center;padding:24px 0;">
+        <p class="last-update" id="last-update"></p>
+        <a href="/" style="
+          display:inline-flex;align-items:center;gap:8px;
+          padding:12px 28px; margin-top:12px;
+          background:var(--surface);border:1px solid var(--border-2);
+          border-radius:10px;color:var(--text-muted);
+          font-size:14px;font-weight:600;
+          text-decoration:none;transition:all 0.2s;
+        " onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border-2)';this.style.color='var(--text-muted)'">
+          ← Kembali ke Dashboard
+        </a>
+      </div>
+    `;
+
+    // Build chart (only on first load, not on refresh)
+    buildChart(currentInterval);
+  }
+
+  // ====== FETCH DATA ======
+  async function loadAnalysis() {
+    try {
+      const res = await fetch('/api/stock/' + encodeURIComponent(TICKER));
+      if (!res.ok) {
+        throw new Error(res.status === 404 ? 'not_found' : `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      if (json.status === 'success' && json.data) {
+        renderPage(json.data);
+        // Update timestamp
+        const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const el = document.getElementById('last-update');
+        if (el) el.textContent = `Terakhir diperbarui: ${now} WIB`;
+      } else {
+        throw new Error('not_found');
+      }
+    } catch (err) {
+      const msg = err.message === 'not_found'
+        ? `Data analisa untuk <strong>${TICKER}</strong> belum tersedia.<br/>Pastikan saham sudah pernah di-scan.`
+        : `Gagal memuat data.<br/><small>${err.message}</small>`;
+
+      document.getElementById('page-content').innerHTML = `
+        <div class="state-block">
+          <div class="emoji">🔍</div>
+          <p>${msg}</p>
+          <p style="margin-top:16px;"><a href="/" style="color:var(--accent);text-decoration:none;font-weight:600;">← Kembali ke Dashboard</a></p>
+        </div>`;
+    }
+  }
+
+  // ====== REFRESH & COUNTDOWN ======
+  const REFRESH_INTERVAL = 300; // 5 menit dalam detik
+  let secondsLeft = REFRESH_INTERVAL;
+  let countdownTimer = null;
+  let isRefreshing = false;
+
+  function updateCountdown() {
+    const m = Math.floor(secondsLeft / 60);
+    const s = secondsLeft % 60;
+    const label = document.getElementById('countdown-label');
+    if (label) label.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  function startCountdown() {
+    if (countdownTimer) clearInterval(countdownTimer);
+    secondsLeft = REFRESH_INTERVAL;
+    updateCountdown();
+    countdownTimer = setInterval(() => {
+      secondsLeft--;
+      updateCountdown();
+      if (secondsLeft <= 0) {
+        autoRefresh();
+      }
+    }, 1000);
+  }
+
+  function setRefreshState(loading) {
+    isRefreshing = loading;
+    const btn = document.getElementById('refresh-btn');
+    const icon = document.getElementById('refresh-icon');
+    if (btn && icon) {
+      if (loading) {
+        btn.classList.add('loading');
+        icon.className = 'spin';
+        icon.textContent = '⟳';
+      } else {
+        btn.classList.remove('loading');
+        icon.className = '';
+        icon.textContent = '🔄';
+      }
+    }
+  }
+
+  async function manualRefresh() {
+    if (isRefreshing) return;
+    setRefreshState(true);
+    await loadAnalysis();
+    setRefreshState(false);
+    secondsLeft = REFRESH_INTERVAL;
+    updateCountdown();
+  }
+
+  async function autoRefresh() {
+    if (isRefreshing) return;
+    setRefreshState(true);
+    await loadAnalysis();
+    setRefreshState(false);
+    secondsLeft = REFRESH_INTERVAL;
+    updateCountdown();
+  }
+
+  // Initial load
+  loadAnalysis().then(() => {
+    startCountdown();
+  });
+</script>
+</body>
+</html>

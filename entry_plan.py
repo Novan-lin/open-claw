@@ -66,6 +66,9 @@ def generate_trade_plan(price, high=None, low=None, mode="range"):
 
     price_range = high - low
 
+    if price_range == 0:
+        return generate_simple_plan(price)
+
     entry = price
     tp = entry + (price_range * 0.5)
     sl = entry - (price_range * 0.3)

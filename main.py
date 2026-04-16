@@ -584,7 +584,11 @@ def main():
             save_signals(last_signals_state)
 
             # --- FASE 5: Simpan ke signals.json (overwrite setiap loop) ---
-            save_signals_json(kumpulan_hasil)
+            # Hanya timpa jika ada hasil — jaga data lama saat market tutup/scan gagal.
+            if kumpulan_hasil:
+                save_signals_json(kumpulan_hasil)
+            else:
+                print(">>> [signals.json] Scan kosong, data terakhir dipertahankan agar dashboard tetap tampil.")
             
         print("\n[TIDUR] Menunggu 5 Menit (300 detik) untuk siklus selanjutnya... (Ctrl+C manual stop)")
         try:

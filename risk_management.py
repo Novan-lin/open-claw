@@ -54,6 +54,11 @@ def calculate_position_size(capital, risk_percent, entry, stop_loss):
 
     position_size = risk_amount / risk_per_share
     lot = math.floor(position_size / 100)
+
+    if (entry * 100) > capital:
+        print("[RISK MANAGEMENT ERROR] Modal tidak cukup untuk beli 1 lot.")
+        return None
+
     lot = max(lot, 1)
 
     print("[RISK MANAGEMENT]")

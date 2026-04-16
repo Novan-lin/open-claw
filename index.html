@@ -457,6 +457,109 @@
       color: var(--text-dim);
     }
 
+    /* ====== REASON TAGS on cards ====== */
+    .reason-tags {
+      display: flex; flex-wrap: wrap; gap: 5px;
+      padding: 0 22px;
+    }
+    .reason-tag {
+      display: inline-block;
+      font-size: 10px; font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 6px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      letter-spacing: 0.2px;
+    }
+    .reason-tag.positive {
+      background: var(--buy-dim);
+      border-color: rgba(0,217,126,0.25);
+      color: var(--buy);
+    }
+    .reason-tag.negative {
+      background: var(--sell-dim);
+      border-color: rgba(255,77,109,0.25);
+      color: var(--sell);
+    }
+
+    /* ====== AI SUMMARY on card ====== */
+    .card-ai-summary {
+      padding: 10px 22px 4px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* ====== RSI color helpers ====== */
+    .rsi-ob { color: var(--sell) !important; }
+    .rsi-os { color: var(--buy) !important; }
+    .rsi-neutral { color: var(--text) !important; }
+
+    /* ====== Price note ====== */
+    .price-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-style: italic;
+      padding: 8px 0 0;
+    }
+
+    /* ====== MTF (Multi-Timeframe) ====== */
+    .mtf-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.3px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text-muted);
+    }
+    .mtf-badge.mtf-strong-buy  { background: var(--buy-dim); border-color: rgba(0,217,126,0.35); color: var(--buy); }
+    .mtf-badge.mtf-buy         { background: rgba(0,217,126,0.08); border-color: rgba(0,217,126,0.2); color: var(--buy); }
+    .mtf-badge.mtf-strong-sell { background: var(--sell-dim); border-color: rgba(255,77,109,0.35); color: var(--sell); }
+    .mtf-badge.mtf-sell        { background: rgba(255,77,109,0.08); border-color: rgba(255,77,109,0.2); color: var(--sell); }
+    .mtf-badge.mtf-conflict    { background: rgba(245,197,24,0.1); border-color: rgba(245,197,24,0.3); color: var(--gold); }
+    .mtf-badge.mtf-neutral     { background: var(--accent-dim); border-color: rgba(108,122,240,0.2); color: var(--accent); }
+
+    .mtf-tf-row {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      margin-bottom: 6px;
+    }
+    .mtf-tf-label {
+      font-size: 11px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .mtf-tf-details {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .mtf-tf-details span { color: var(--text-dim); }
+    .mtf-bias-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .mtf-bias-tag.bull { background: var(--buy-dim); color: var(--buy); }
+    .mtf-bias-tag.bear { background: var(--sell-dim); color: var(--sell); }
+    .mtf-bias-tag.neut { background: var(--accent-dim); color: var(--accent); }
+
     /* ====== EMPTY / LOADING / ERROR STATES ====== */
     .state-block {
       grid-column: 1 / -1;
@@ -473,6 +576,28 @@
       50% { opacity: 0.4; }
     }
 
+    /* ====== MARKET STATUS BANNER ====== */
+    #market-banner {
+      margin-bottom: 16px;
+      padding: 10px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #market-banner.open {
+      background: var(--buy-dim);
+      border: 1px solid rgba(0,217,126,0.25);
+      color: var(--buy);
+    }
+    #market-banner.closed {
+      background: rgba(108,122,240,0.1);
+      border: 1px solid rgba(108,122,240,0.2);
+      color: var(--text-dim);
+    }
+
     /* ====== TIMESTAMP ====== */
     #last-update {
       text-align: center;
@@ -480,6 +605,348 @@
       color: var(--text-muted);
       margin-top: 32px;
       font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ====== FILTER TOOLBAR ====== */
+    .filter-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .filter-group {
+      display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .filter-btn {
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: 10px;
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600;
+      padding: 8px 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+    .filter-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .filter-btn.active-buy {
+      background: var(--buy-dim);
+      border-color: var(--buy);
+      color: var(--buy);
+    }
+    .filter-btn.active-sell {
+      background: var(--sell-dim);
+      border-color: var(--sell);
+      color: var(--sell);
+    }
+    .filter-btn .filter-count {
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      padding: 1px 7px;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .toggle-btn {
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: 10px;
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600;
+      padding: 8px 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .toggle-btn:hover { border-color: var(--accent); color: var(--text); }
+    .toggle-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ====== DETAIL MODAL ====== */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.25s;
+    }
+    .modal-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    .modal-content {
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius);
+      max-width: 560px;
+      width: 100%;
+      max-height: 85vh;
+      overflow-y: auto;
+      transform: translateY(20px) scale(0.97);
+      transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+      box-shadow: var(--shadow);
+    }
+    .modal-overlay.show .modal-content {
+      transform: translateY(0) scale(1);
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header-left {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .modal-ticker {
+      font-size: 22px; font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .modal-close {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      width: 36px; height: 36px;
+      cursor: pointer;
+      font-size: 18px;
+      display: grid; place-items: center;
+      transition: all 0.2s;
+    }
+    .modal-close:hover {
+      background: var(--sell-dim);
+      border-color: var(--sell);
+      color: var(--sell);
+    }
+    .modal-body {
+      padding: 20px 24px 24px;
+    }
+    .modal-section {
+      margin-bottom: 20px;
+    }
+    .modal-section:last-child { margin-bottom: 0; }
+    .modal-section-title {
+      font-size: 10px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 10px;
+    }
+    .modal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .modal-grid-3 {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .modal-stat {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .modal-stat .label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    .modal-stat .value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .modal-ai-text {
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--text-dim);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .modal-content::-webkit-scrollbar { width: 6px; }
+    .modal-content::-webkit-scrollbar-track { background: transparent; }
+    .modal-content::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+
+    /* ====== FULL ANALYSIS PAGE ====== */
+    .analysis-page {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      z-index: 2000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s;
+      overflow-y: auto;
+    }
+    .analysis-page.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    .analysis-page-inner {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px 64px;
+    }
+    .analysis-topbar {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(10,13,20,0.9);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .analysis-back-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      width: 38px; height: 38px;
+      cursor: pointer;
+      font-size: 18px;
+      display: grid; place-items: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .analysis-back-btn:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .analysis-topbar-info {
+      display: flex; align-items: center; gap: 10px;
+      flex: 1; min-width: 0;
+    }
+    .analysis-topbar-ticker {
+      font-size: 20px; font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .analysis-hero {
+      padding: 32px 0 24px;
+      display: flex; align-items: center; gap: 16px;
+      flex-wrap: wrap;
+    }
+    .analysis-hero-price {
+      font-size: 36px; font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .analysis-section {
+      margin-bottom: 28px;
+    }
+    .analysis-section-title {
+      font-size: 12px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .analysis-section-title::after {
+      content: '';
+      flex: 1; height: 1px;
+      background: var(--border);
+    }
+    .analysis-ai-box {
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius);
+      padding: 24px;
+      position: relative;
+    }
+    .analysis-ai-box::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), #00d97e);
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .analysis-ai-content {
+      font-size: 15px;
+      line-height: 2;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .analysis-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+    }
+    .analysis-stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+    }
+    .analysis-stat-card .label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+    .analysis-stat-card .value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .analysis-reason-tags {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .analysis-reason-tag {
+      font-size: 12px; font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .analysis-reason-tag.positive {
+      background: var(--buy-dim);
+      border-color: rgba(0,217,126,0.25);
+      color: var(--buy);
+    }
+    .analysis-reason-tag.negative {
+      background: var(--sell-dim);
+      border-color: rgba(255,77,109,0.25);
+      color: var(--sell);
+    }
+    .analysis-sm-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 18px;
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text-dim);
+    }
+    .analysis-page::-webkit-scrollbar { width: 6px; }
+    .analysis-page::-webkit-scrollbar-track { background: transparent; }
+    .analysis-page::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+
+    @media (max-width: 600px) {
+      .analysis-hero { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .analysis-hero-price { font-size: 28px; }
+      .analysis-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     /* ====== ANIMATIONS ====== */
@@ -736,8 +1203,39 @@
     <div class="section-line"></div>
   </div>
 
+  <!-- Filter Toolbar -->
+  <div class="filter-toolbar">
+    <div class="filter-group">
+      <button class="filter-btn active" data-filter="ALL" onclick="setFilter('ALL')">Semua <span class="filter-count" id="fc-all">0</span></button>
+      <button class="filter-btn" data-filter="BUY" onclick="setFilter('BUY')">🟢 BUY <span class="filter-count" id="fc-buy">0</span></button>
+      <button class="filter-btn" data-filter="SELL" onclick="setFilter('SELL')">🔴 SELL <span class="filter-count" id="fc-sell">0</span></button>
+      <button class="filter-btn" data-filter="HOLD" onclick="setFilter('HOLD')">🔵 HOLD <span class="filter-count" id="fc-hold">0</span></button>
+    </div>
+    <button class="toggle-btn" id="toggle-all-btn" onclick="toggleShowAll()">Lihat Semua Saham</button>
+  </div>
+
+  <!-- Market Status Banner -->
+  <div id="market-banner" style="display:none;"></div>
+
   <!-- Cards Grid -->
   <div id="cards-grid">
+
+  <!-- Detail Modal -->
+  <div class="modal-overlay" id="detail-modal">
+    <div class="modal-content" id="modal-inner"></div>
+  </div>
+
+  <!-- Full Analysis Page -->
+  <div class="analysis-page" id="analysis-page">
+    <div class="analysis-topbar">
+      <button class="analysis-back-btn" onclick="closeAnalysisPage()">&larr;</button>
+      <div class="analysis-topbar-info">
+        <span class="analysis-topbar-ticker" id="analysis-ticker-top"></span>
+        <span class="badge-signal" id="analysis-badge-top"></span>
+      </div>
+    </div>
+    <div class="analysis-page-inner" id="analysis-page-inner"></div>
+  </div>
     <div class="state-block skeleton">
       <div class="emoji">⏳</div>
       <p>Memuat data analisis saham...<br/>Mohon tunggu sebentar.</p>
@@ -753,7 +1251,7 @@
   /* ───────────────────────────────────────────
      COUNTDOWN + RING ANIMATION
   ─────────────────────────────────────────── */
-  const REFRESH_INTERVAL = 10; // detik
+  const REFRESH_INTERVAL = 300; // detik (5 menit)
   const CIRCUMFERENCE = 2 * Math.PI * 8; // r=8  ≈ 50.27
 
   const ringFg         = document.getElementById('ring-fg');
@@ -797,6 +1295,53 @@
     return s.entry != null || s.tp != null || s.sl != null;
   }
 
+  /* ─── helper: build MTF section for modal ─── */
+  function buildMtfSection(s) {
+    const mtf = s._meta?.mtf;
+    if (!mtf || mtf.confluence === 'NO_DATA') return '';
+
+    const confClsMap = { 'STRONG_BUY': 'mtf-strong-buy', 'BUY': 'mtf-buy', 'STRONG_SELL': 'mtf-strong-sell', 'SELL': 'mtf-sell', 'CONFLICT': 'mtf-conflict', 'NEUTRAL': 'mtf-neutral' };
+    const confLblMap = { 'STRONG_BUY': '⬆⬆ Strong Buy', 'BUY': '⬆ Buy', 'STRONG_SELL': '⬇⬇ Strong Sell', 'SELL': '⬇ Sell', 'CONFLICT': '⚠ Conflict', 'NEUTRAL': '⏸ Neutral' };
+    const confCls = confClsMap[mtf.confluence] || 'mtf-neutral';
+    const confLbl = confLblMap[mtf.confluence] || mtf.confluence;
+
+    function tfRow(key, label) {
+      const tf = mtf[key];
+      if (!tf || tf.status !== 'ok') return `
+        <div class="mtf-tf-row">
+          <div class="mtf-tf-label">${label}</div>
+          <div class="mtf-tf-details"><span style="color:var(--text-muted)">Data tidak tersedia</span></div>
+        </div>`;
+
+      const biasCls = tf.bias === 'BULLISH' ? 'bull' : tf.bias === 'BEARISH' ? 'bear' : 'neut';
+      return `
+        <div class="mtf-tf-row">
+          <div class="mtf-tf-label">${label}</div>
+          <div class="mtf-tf-details">
+            <span>RSI ${tf.rsi ?? '—'}</span>
+            <span>MA20 ${tf.ma20 ?? '—'}</span>
+            <span>MA50 ${tf.ma50 ?? '—'}</span>
+            <span class="mtf-bias-tag ${biasCls}">${tf.bias}</span>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="modal-section">
+        <div class="modal-section-title">📊 Multi-Timeframe Analysis</div>
+        <div style="margin-bottom:10px;">
+          <span class="mtf-badge ${confCls}" style="font-size:13px;padding:6px 16px;">${confLbl}</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">Score: ${mtf.confluence_score ?? 0}</span>
+        </div>
+        ${tfRow('weekly', 'Weekly')}
+        ${tfRow('daily', 'Daily')}
+        ${tfRow('intraday', '1 Hour')}
+        <div style="margin-top:10px;font-size:12px;line-height:1.6;color:var(--text-dim);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          💡 ${mtf.summary || '—'}
+        </div>
+      </div>`;
+  }
+
   /* ─── helper: sort signals sama seperti bot ─── */
   function sortSignals(signals) {
     return [...signals].sort((a, b) => {
@@ -808,68 +1353,421 @@
     });
   }
 
-  function renderCards(signals) {
+  /* ─── STATE: filter & show-all ─── */
+  let _allSignals   = [];   // semua sinyal dari API
+  let _activeFilter = 'ALL';
+  let _showAll      = false;
+
+  function setFilter(f) {
+    _activeFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      const bf = btn.dataset.filter;
+      btn.classList.remove('active', 'active-buy', 'active-sell');
+      if (bf === f) {
+        if (f === 'BUY') btn.classList.add('active-buy');
+        else if (f === 'SELL') btn.classList.add('active-sell');
+        else btn.classList.add('active');
+      }
+    });
+    renderCards(_allSignals, false);
+  }
+
+  function toggleShowAll() {
+    _showAll = !_showAll;
+    const btn = document.getElementById('toggle-all-btn');
+    btn.classList.toggle('active', _showAll);
+    btn.textContent = _showAll ? 'Top 5 Saja' : 'Lihat Semua Saham';
+    renderCards(_allSignals, false);
+  }
+
+  function updateFilterCounts(signals) {
+    const all  = signals.length;
+    const buy  = signals.filter(s => s.signal === 'BUY').length;
+    const sell = signals.filter(s => s.signal === 'SELL').length;
+    const hold = signals.filter(s => s.signal === 'HOLD').length;
+    document.getElementById('fc-all').textContent  = all;
+    document.getElementById('fc-buy').textContent  = buy;
+    document.getElementById('fc-sell').textContent  = sell;
+    document.getElementById('fc-hold').textContent = hold;
+  }
+
+  /* ─── DETAIL MODAL ─── */
+  function openDetail(idx) {
+    const s = _allSignals[idx];
+    if (!s) return;
+    const sig      = s.signal || 'HOLD';
+    const sigClass = sig === 'BUY' ? 'BUY' : sig === 'SELL' ? 'SELL' : 'HOLD';
+    const sigColor = sig === 'BUY' ? 'var(--buy)' : sig === 'SELL' ? 'var(--sell)' : 'var(--hold)';
+    const sm       = s.smart_money === true;
+    const gap      = s.gap_up === true;
+    const rsi      = s._meta?.rsi  != null ? Number(s._meta.rsi).toFixed(2) : '—';
+    const ma20     = s._meta?.ma20 != null ? Number(s._meta.ma20).toFixed(2) : '—';
+    const ma50     = s._meta?.ma50 != null ? Number(s._meta.ma50).toFixed(2) : '—';
+    const score    = s.score ?? 0;
+    const ai       = s.ai_analysis || s.ai || '—';
+    const smLabel  = s._meta?.volume_label || (sm ? 'AKTIF' : 'TIDAK');
+    const smConf   = s._meta?.sm_confidence != null ? (s._meta.sm_confidence * 100).toFixed(0) + '%' : '—';
+    const guConf   = s._meta?.gap_confidence || '—';
+    const alasan   = s._meta?.alasan || '—';
+    const smAlasan = s._meta?.sm_alasan || '—';
+
+    // Format alasan as list if array
+    const alasanArr = Array.isArray(alasan) ? alasan : (typeof alasan === 'string' && alasan !== '—' ? [alasan] : []);
+    const alasanHTML = alasanArr.length > 0
+      ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${alasanArr.map(a => {
+          const lower = a.toLowerCase();
+          const cls = (lower.includes('overbought') || lower.includes('bearish') || lower.includes('di bawah')) ? 'negative'
+                    : (lower.includes('uptrend') || lower.includes('smart money') || lower.includes('gap up') || lower.includes('bullish') || lower.includes('di atas') || lower.includes('oversold') || lower.includes('confirmation')) ? 'positive'
+                    : '';
+          return `<span class="reason-tag ${cls}">${a}</span>`;
+        }).join('')}</div>`
+      : `<div class="modal-ai-text">${alasan}</div>`;
+
+    // MA trend analysis
+    const ma20v = s._meta?.ma20 != null ? Number(s._meta.ma20) : null;
+    const ma50v = s._meta?.ma50 != null ? Number(s._meta.ma50) : null;
+    const hargaV = s.harga ?? s.price ?? null;
+    const trendNote = (ma20v && ma50v) ? (ma20v > ma50v ? '📈 Uptrend (MA20 > MA50)' : '📉 Downtrend (MA20 < MA50)') : '—';
+    const trendColor = (ma20v && ma50v) ? (ma20v > ma50v ? 'var(--buy)' : 'var(--sell)') : 'var(--text-muted)';
+    const priceVsMa = (hargaV && ma20v) ? (hargaV > ma20v ? 'Di atas MA20' : 'Di bawah MA20') : '—';
+    const priceVsMaColor = (hargaV && ma20v) ? (hargaV > ma20v ? 'var(--buy)' : 'var(--sell)') : 'var(--text-muted)';
+
+    // Entry vs harga note
+    const entryNote = (s.entry != null && hargaV != null && s.entry !== hargaV)
+      ? `<div class="price-note">ℹ️ Harga (Rp ${Number(hargaV).toLocaleString('id-ID')}) = harga close terakhir. Entry (Rp ${Number(s.entry).toLocaleString('id-ID')}) = rekomendasi harga beli berdasarkan kalkulasi trade plan.</div>`
+      : '';
+
+    const tradePlanHTML = hasTradePlan(s) ? `
+      <div class="modal-section">
+        <div class="modal-section-title">Trade Plan</div>
+        <div class="modal-grid modal-grid-3">
+          <div class="modal-stat"><span class="label">Entry</span><span class="value">${formatPrice(s.entry)}</span></div>
+          <div class="modal-stat"><span class="label">Take Profit</span><span class="value" style="color:var(--buy)">${formatPrice(s.tp)}</span></div>
+          <div class="modal-stat"><span class="label">Stop Loss</span><span class="value" style="color:var(--sell)">${formatPrice(s.sl)}</span></div>
+        </div>
+        ${entryNote}
+      </div>` : '';
+
+    const riskHTML = (s.lot != null && s.risk_amount != null) ? `
+      <div class="modal-section">
+        <div class="modal-section-title">Risk Management</div>
+        <div class="modal-grid">
+          <div class="modal-stat"><span class="label">Position Size</span><span class="value">${s.lot} lot</span></div>
+          <div class="modal-stat"><span class="label">Risk Amount</span><span class="value">${formatPrice(s.risk_amount)}</span></div>
+        </div>
+      </div>` : '';
+
+    document.getElementById('modal-inner').innerHTML = `
+      <div class="modal-header">
+        <div class="modal-header-left">
+          <span class="modal-ticker">${s.ticker || '—'}</span>
+          <span class="badge-signal ${sigClass}" style="font-size:13px;padding:5px 14px;">${sig}</span>
+        </div>
+        <button class="modal-close" onclick="closeDetail()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-section">
+          <div class="modal-section-title">Indikator Teknikal</div>
+          <div class="modal-grid">
+            <div class="modal-stat"><span class="label">Harga (Close)</span><span class="value">${formatPrice(s.harga ?? s.price)}</span></div>
+            <div class="modal-stat"><span class="label">Score</span><span class="value" style="color:${score >= 6 ? 'var(--buy)' : score >= 4 ? '#f59e0b' : 'var(--text-muted)'}">${score} / 8</span></div>
+            <div class="modal-stat"><span class="label">RSI (14)</span><span class="value" style="color:${rsi > 70 ? 'var(--sell)' : rsi < 30 ? 'var(--buy)' : 'var(--text)'}">${rsi} ${rsi > 70 ? '⚠️ Overbought' : rsi < 30 ? '✅ Oversold' : ''}</span></div>
+            <div class="modal-stat"><span class="label">MA20 (SMA)</span><span class="value">${ma20}</span></div>
+            <div class="modal-stat"><span class="label">MA50 (SMA)</span><span class="value">${ma50}</span></div>
+            <div class="modal-stat"><span class="label">Trend</span><span class="value" style="color:${trendColor};font-size:12px;">${trendNote}</span></div>
+            <div class="modal-stat"><span class="label">Harga vs MA20</span><span class="value" style="color:${priceVsMaColor}">${priceVsMa}</span></div>
+            <div class="modal-stat"><span class="label">Volume</span><span class="value" style="color:${sm ? 'var(--gold)' : 'var(--text)'}">${sm ? '🔥 ' + smLabel : smLabel || '—'}</span></div>
+            <div class="modal-stat"><span class="label">SM Confidence</span><span class="value">${smConf}</span></div>
+            <div class="modal-stat"><span class="label">Gap Up</span><span class="value" style="color:${gap ? 'var(--buy)' : 'var(--text-muted)'}">${gap ? '🚀 ' + guConf : '—'}</span></div>
+          </div>
+        </div>
+
+        ${tradePlanHTML}
+        ${riskHTML}
+
+        <div class="modal-section">
+          <div class="modal-section-title">Alasan Scoring</div>
+          ${alasanHTML}
+        </div>
+
+        ${smAlasan !== '—' ? `<div class="modal-section">
+          <div class="modal-section-title">Alasan Smart Money</div>
+          <div class="modal-ai-text">${smAlasan}</div>
+        </div>` : ''}
+
+        ${buildMtfSection(s)}
+
+        <div class="modal-section">
+          <div class="modal-section-title">🤖 Analisa AI</div>
+          <div class="modal-ai-text">${ai}</div>
+        </div>
+
+        <div style="padding-top:8px;">
+          <button onclick="openAnalysisPage(${idx})" style="
+            width:100%; padding:12px;
+            background:linear-gradient(135deg, var(--accent), #00d97e);
+            border:none; border-radius:10px;
+            color:#fff; font-family:'Inter',sans-serif;
+            font-size:14px; font-weight:700;
+            cursor:pointer; transition:all 0.2s;
+            display:flex; align-items:center; justify-content:center; gap:8px;
+          " onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+            📄 Buka Halaman Analisa Lengkap
+          </button>
+        </div>
+      </div>
+    `;
+    document.getElementById('detail-modal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeDetail() {
+    document.getElementById('detail-modal').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  // Tutup modal klik di luar
+  document.getElementById('detail-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeDetail();
+  });
+  // Tutup modal tekan Escape
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (document.getElementById('analysis-page').classList.contains('show')) {
+        closeAnalysisPage();
+      } else {
+        closeDetail();
+      }
+    }
+  });
+
+  /* ─── FULL ANALYSIS PAGE ─── */
+  function openAnalysisPage(idx) {
+    const s = _allSignals[idx];
+    if (!s) return;
+
+    // Close modal first
+    closeDetail();
+
+    const sig      = s.signal || 'HOLD';
+    const sigClass = sig === 'BUY' ? 'BUY' : sig === 'SELL' ? 'SELL' : 'HOLD';
+    const sm       = s.smart_money === true;
+    const gap      = s.gap_up === true;
+    const rsi      = s._meta?.rsi  != null ? Number(s._meta.rsi).toFixed(2) : '—';
+    const ma20     = s._meta?.ma20 != null ? Number(s._meta.ma20).toFixed(2) : '—';
+    const ma50     = s._meta?.ma50 != null ? Number(s._meta.ma50).toFixed(2) : '—';
+    const score    = s.score ?? 0;
+    const ai       = s.ai_analysis || s.ai || '—';
+    const smLabel  = s._meta?.volume_label || (sm ? 'AKTIF' : 'TIDAK');
+    const smConf   = s._meta?.sm_confidence != null ? (s._meta.sm_confidence * 100).toFixed(0) + '%' : '—';
+    const guConf   = s._meta?.gap_confidence || '—';
+    const alasan   = s._meta?.alasan || '—';
+    const smAlasan = s._meta?.sm_alasan || '—';
+    const hargaV   = s.harga ?? s.price ?? null;
+
+    // MA analysis
+    const ma20v = s._meta?.ma20 != null ? Number(s._meta.ma20) : null;
+    const ma50v = s._meta?.ma50 != null ? Number(s._meta.ma50) : null;
+    const trendNote = (ma20v && ma50v) ? (ma20v > ma50v ? '📈 Uptrend (MA20 > MA50)' : '📉 Downtrend (MA20 < MA50)') : '—';
+    const trendColor = (ma20v && ma50v) ? (ma20v > ma50v ? 'var(--buy)' : 'var(--sell)') : 'var(--text-muted)';
+    const priceVsMa = (hargaV && ma20v) ? (hargaV > ma20v ? 'Di atas MA20 ✅' : 'Di bawah MA20 ⚠️') : '—';
+    const priceVsMaColor = (hargaV && ma20v) ? (hargaV > ma20v ? 'var(--buy)' : 'var(--sell)') : 'var(--text-muted)';
+    const rsiVal = s._meta?.rsi != null ? Number(s._meta.rsi) : null;
+
+    // Alasan tags
+    const alasanArr = Array.isArray(alasan) ? alasan : (typeof alasan === 'string' && alasan !== '—' ? [alasan] : []);
+    const alasanHTML = alasanArr.length > 0
+      ? `<div class="analysis-reason-tags">${alasanArr.map(a => {
+          const lower = a.toLowerCase();
+          const cls = (lower.includes('overbought') || lower.includes('bearish') || lower.includes('di bawah')) ? 'negative'
+                    : (lower.includes('uptrend') || lower.includes('smart money') || lower.includes('gap up') || lower.includes('bullish') || lower.includes('di atas') || lower.includes('oversold') || lower.includes('confirmation')) ? 'positive'
+                    : '';
+          return `<span class="analysis-reason-tag ${cls}">${a}</span>`;
+        }).join('')}</div>`
+      : `<p style="color:var(--text-muted)">Tidak ada alasan scoring.</p>`;
+
+    // Trade plan
+    const tradePlanHTML = hasTradePlan(s) ? `
+      <div class="analysis-section">
+        <div class="analysis-section-title">💰 Trade Plan</div>
+        <div class="analysis-grid">
+          <div class="analysis-stat-card"><span class="label">Entry</span><span class="value">${formatPrice(s.entry)}</span></div>
+          <div class="analysis-stat-card"><span class="label">Take Profit</span><span class="value" style="color:var(--buy)">${formatPrice(s.tp)}</span></div>
+          <div class="analysis-stat-card"><span class="label">Stop Loss</span><span class="value" style="color:var(--sell)">${formatPrice(s.sl)}</span></div>
+        </div>
+      </div>` : '';
+
+    // Risk management
+    const riskHTML = (s.lot != null && s.risk_amount != null) ? `
+      <div class="analysis-section">
+        <div class="analysis-section-title">⚖️ Risk Management</div>
+        <div class="analysis-grid">
+          <div class="analysis-stat-card"><span class="label">Position Size</span><span class="value">${s.lot} lot</span></div>
+          <div class="analysis-stat-card"><span class="label">Risk Amount</span><span class="value">${formatPrice(s.risk_amount)}</span></div>
+        </div>
+      </div>` : '';
+
+    // Smart money section
+    const smSection = smAlasan !== '—' ? `
+      <div class="analysis-section">
+        <div class="analysis-section-title">🔥 Smart Money Analysis</div>
+        <div class="analysis-sm-box">${smAlasan}</div>
+      </div>` : '';
+
+    // MTF section - reuse existing builder
+    const mtfRaw = buildMtfSection(s);
+    const mtfSection = mtfRaw || '';
+
+    // Topbar
+    document.getElementById('analysis-ticker-top').textContent = s.ticker || '—';
+    const badgeTop = document.getElementById('analysis-badge-top');
+    badgeTop.textContent = sig;
+    badgeTop.className = 'badge-signal ' + sigClass;
+
+    // Build page content
+    document.getElementById('analysis-page-inner').innerHTML = `
+      <!-- Hero -->
+      <div class="analysis-hero">
+        <span class="analysis-hero-price">${formatPrice(hargaV)}</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:13px;color:${score >= 6 ? 'var(--buy)' : score >= 4 ? '#f59e0b' : 'var(--text-muted)'};font-weight:700;font-family:'JetBrains Mono',monospace;">Score ${score}/8</span>
+          ${sm ? '<span style="font-size:12px;color:var(--gold);font-weight:600;">🔥 Smart Money</span>' : ''}
+          ${gap ? '<span style="font-size:12px;color:var(--buy);font-weight:600;">🚀 Gap Up</span>' : ''}
+        </div>
+      </div>
+
+      <!-- AI Analysis (FULL) -->
+      <div class="analysis-section">
+        <div class="analysis-section-title">🤖 Analisa AI Lengkap</div>
+        <div class="analysis-ai-box">
+          <div class="analysis-ai-content">${ai}</div>
+        </div>
+      </div>
+
+      <!-- Indikator Teknikal -->
+      <div class="analysis-section">
+        <div class="analysis-section-title">📈 Indikator Teknikal</div>
+        <div class="analysis-grid">
+          <div class="analysis-stat-card"><span class="label">Harga (Close)</span><span class="value">${formatPrice(hargaV)}</span></div>
+          <div class="analysis-stat-card"><span class="label">RSI (14)</span><span class="value" style="color:${rsiVal != null ? (rsiVal > 70 ? 'var(--sell)' : rsiVal < 30 ? 'var(--buy)' : 'var(--text)') : 'var(--text)'}">${rsi} ${rsiVal != null ? (rsiVal > 70 ? '⚠️ OB' : rsiVal < 30 ? '✅ OS' : '') : ''}</span></div>
+          <div class="analysis-stat-card"><span class="label">MA20 (SMA)</span><span class="value">${ma20}</span></div>
+          <div class="analysis-stat-card"><span class="label">MA50 (SMA)</span><span class="value">${ma50}</span></div>
+          <div class="analysis-stat-card"><span class="label">Trend</span><span class="value" style="color:${trendColor};font-size:13px;">${trendNote}</span></div>
+          <div class="analysis-stat-card"><span class="label">Harga vs MA20</span><span class="value" style="color:${priceVsMaColor}">${priceVsMa}</span></div>
+          <div class="analysis-stat-card"><span class="label">Volume</span><span class="value" style="color:${sm ? 'var(--gold)' : 'var(--text)'}">${sm ? '🔥 ' + smLabel : smLabel || '—'}</span></div>
+          <div class="analysis-stat-card"><span class="label">SM Confidence</span><span class="value">${smConf}</span></div>
+          <div class="analysis-stat-card"><span class="label">Gap Up</span><span class="value" style="color:${gap ? 'var(--buy)' : 'var(--text-muted)'}">${gap ? '🚀 ' + guConf : '—'}</span></div>
+        </div>
+      </div>
+
+      ${tradePlanHTML}
+      ${riskHTML}
+
+      <!-- Alasan Scoring -->
+      <div class="analysis-section">
+        <div class="analysis-section-title">🏷️ Alasan Scoring</div>
+        ${alasanHTML}
+      </div>
+
+      ${smSection}
+      ${mtfSection}
+    `;
+
+    // Show page
+    document.getElementById('analysis-page').classList.add('show');
+    document.getElementById('analysis-page').scrollTop = 0;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeAnalysisPage() {
+    document.getElementById('analysis-page').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  function renderCards(signals, scanning) {
     const grid = document.getElementById('cards-grid');
 
     if (!signals || signals.length === 0) {
+      if (scanning) {
+        grid.innerHTML = `<div class="state-block skeleton">
+          <div class="emoji">📡</div>
+          <p><strong>Sedang scan ${20} saham LQ45...</strong><br/>Mohon tunggu, halaman akan otomatis refresh saat data siap.</p>
+        </div>`;
+      } else {
+        grid.innerHTML = `<div class="state-block">
+          <div class="emoji">🔍</div>
+          <p>Belum ada data sinyal.<br/>Pastikan koneksi internet aktif, lalu tunggu sebentar.</p>
+        </div>`;
+      }
+      return;
+    }
+
+    // Sort
+    const sorted = sortSignals(signals);
+
+    // Filter berdasarkan sinyal aktif
+    const filtered = _activeFilter === 'ALL' ? sorted : sorted.filter(s => s.signal === _activeFilter);
+
+    if (filtered.length === 0) {
+      const label = _activeFilter === 'BUY' ? '🟢 BUY' : _activeFilter === 'SELL' ? '🔴 SELL' : '🔵 HOLD';
       grid.innerHTML = `<div class="state-block">
-        <div class="emoji">🔍</div>
-        <p>Belum ada sinyal tersedia saat ini.<br/>Bot mungkin menunggu jam bursa buka.</p>
+        <div class="emoji">${_activeFilter === 'BUY' ? '🟢' : _activeFilter === 'SELL' ? '🔴' : '🔵'}</div>
+        <p>Tidak ada saham dengan sinyal <strong>${label}</strong> saat ini.</p>
       </div>`;
       return;
     }
 
-    // Sort by score DESC → smart_money → gap_up, ambil Top 5
-    const sorted = sortSignals(signals);
-    const top5   = sorted.slice(0, 5);
+    // Batasi top 5 kecuali _showAll
+    const display = _showAll ? filtered : filtered.slice(0, 5);
 
     const RANK_MEDALS  = ['🥇', '🥈', '🥉', '🏅', '🏅'];
     const RANK_LABELS  = ['#1 Terbaik', '#2', '#3', '#4', '#5'];
 
-    grid.innerHTML = top5.map((s, i) => {
+    grid.innerHTML = display.map((s, i) => {
+      // Cari index asli di _allSignals untuk modal
+      const realIdx = _allSignals.indexOf(s);
       const sig     = s.signal || 'HOLD';
       const sm      = s.smart_money === true;
       const gap     = s.gap_up === true;
-      const rsi     = s._meta?.rsi  != null ? Number(s._meta.rsi).toFixed(1) : '—';
+      const rsiVal  = s._meta?.rsi  != null ? Number(s._meta.rsi) : null;
+      const rsi     = rsiVal != null ? rsiVal.toFixed(1) : '—';
+      const rsiClass = rsiVal != null ? (rsiVal > 70 ? 'rsi-ob' : rsiVal < 30 ? 'rsi-os' : 'rsi-neutral') : '';
       const ma20    = s._meta?.ma20 != null ? Number(s._meta.ma20).toFixed(0) : '—';
+      const ma50    = s._meta?.ma50 != null ? Number(s._meta.ma50).toFixed(0) : '—';
       const score   = s.score ?? 0;
       const ai      = s.ai_analysis || s.ai || '—';
       const smLabel = s._meta?.volume_label || (sm ? 'AKTIF' : '');
       const smConf  = s._meta?.sm_confidence != null ? (s._meta.sm_confidence * 100).toFixed(0) + '%' : '';
       const guConf  = s._meta?.gap_confidence || '';
-      const tradePlan = hasTradePlan(s) ? `
-        <div class="trade-plan">
-          <div class="trade-plan-label">Trade Plan</div>
-          <div class="trade-plan-values">
-            <div class="trade-plan-item entry">
-              <span class="label">Entry</span>
-              <span class="value">${formatPrice(s.entry)}</span>
-            </div>
-            <div class="trade-plan-item tp">
-              <span class="label">TP</span>
-              <span class="value">${formatPrice(s.tp)}</span>
-            </div>
-            <div class="trade-plan-item sl">
-              <span class="label">SL</span>
-              <span class="value">${formatPrice(s.sl)}</span>
-            </div>
-          </div>
+
+      // Alasan scoring tags
+      const alasanRaw = s._meta?.alasan;
+      const alasanArr = Array.isArray(alasanRaw) ? alasanRaw : (typeof alasanRaw === 'string' && alasanRaw !== '—' ? [alasanRaw] : []);
+      const reasonTagsHTML = alasanArr.length > 0 ? `
+        <div class="reason-tags">
+          ${alasanArr.map(a => {
+            const lower = a.toLowerCase();
+            const cls = (lower.includes('overbought') || lower.includes('bearish') || lower.includes('di bawah')) ? 'negative'
+                      : (lower.includes('uptrend') || lower.includes('smart money') || lower.includes('gap up') || lower.includes('bullish') || lower.includes('di atas') || lower.includes('oversold') || lower.includes('confirmation')) ? 'positive'
+                      : '';
+            return `<span class="reason-tag ${cls}">${a}</span>`;
+          }).join('')}
         </div>` : '';
 
-      const riskMgt = (s.lot != null && s.risk_amount != null) ? `
-        <div class="trade-plan" style="padding-top:0;">
-          <div class="trade-plan-label">Risk Management</div>
-          <div class="trade-plan-values" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
-            <div class="trade-plan-item">
-              <span class="label">Position Size</span>
-              <span class="value" style="color:var(--text);">${s.lot} lot</span>
-            </div>
-            <div class="trade-plan-item">
-              <span class="label">Risk</span>
-              <span class="value" style="color:var(--text);">${s.risk_amount >= 1000 ? Math.round(s.risk_amount / 1000) + 'k' : s.risk_amount}</span>
-            </div>
-          </div>
-        </div>` : '';
+      // AI summary (2 baris) untuk card — skip header separator lines
+      const aiClean = ai !== '—' ? ai.split('\n').filter(l => !l.startsWith('══') && !l.startsWith('📊') && !l.startsWith('📈') && l.trim() !== '').slice(0, 3).join(' ').trim() : '';
+      const aiSummary = aiClean ? `<div class="card-ai-summary">🤖 ${aiClean}</div>` : '';
+
+      // MTF confluence badge
+      const mtf = s._meta?.mtf;
+      const mtfConf = mtf?.confluence || null;
+      const mtfBadgeHTML = mtfConf ? (() => {
+        const clsMap = { 'STRONG_BUY': 'mtf-strong-buy', 'BUY': 'mtf-buy', 'STRONG_SELL': 'mtf-strong-sell', 'SELL': 'mtf-sell', 'CONFLICT': 'mtf-conflict', 'NEUTRAL': 'mtf-neutral' };
+        const lblMap = { 'STRONG_BUY': '⬆⬆ MTF Strong Buy', 'BUY': '⬆ MTF Buy', 'STRONG_SELL': '⬇⬇ MTF Strong Sell', 'SELL': '⬇ MTF Sell', 'CONFLICT': '⚠ MTF Conflict', 'NEUTRAL': '⏸ MTF Neutral', 'NO_DATA': '— MTF No Data' };
+        const cls = clsMap[mtfConf] || 'mtf-neutral';
+        const lbl = lblMap[mtfConf] || mtfConf;
+        return `<div class="mtf-badge ${cls}">${lbl}</div>`;
+      })() : '';
 
       const medal    = RANK_MEDALS[i]  || '🏅';
       const rankLbl  = RANK_LABELS[i]  || `#${i+1}`;
@@ -881,11 +1779,19 @@
       // Signal CSS class
       const sigClass = sig === 'BUY' ? 'BUY' : sig === 'SELL' ? 'SELL' : 'HOLD';
 
+      // Trade plan preview (compact — detail di modal)
+      const planPreview = hasTradePlan(s) ? `
+        <div style="padding:6px 22px 0;display:flex;gap:12px;font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">
+          <span>Entry ${formatPrice(s.entry)}</span>
+          <span style="color:var(--buy)">TP ${formatPrice(s.tp)}</span>
+          <span style="color:var(--sell)">SL ${formatPrice(s.sl)}</span>
+        </div>` : '';
+
       return `
-      <article class="signal-card ${sigClass}" style="animation-delay:${i * 0.07}s" data-rank="${i+1}">
+      <article class="signal-card ${sigClass}" style="animation-delay:${i * 0.07}s" data-rank="${i+1}" data-idx="${realIdx}">
 
         <!-- RANK BADGE -->
-        <div class="rank-badge rank-${i+1}">
+        <div class="rank-badge rank-${Math.min(i+1, 5)}">
           <span class="rank-medal">${medal}</span>
           <span class="rank-label">${rankLbl}</span>
         </div>
@@ -911,11 +1817,15 @@
         <div class="card-metrics">
           <div class="metric-chip">
             <span class="label">RSI</span>
-            <span class="value">${rsi}</span>
+            <span class="value ${rsiClass}">${rsi}</span>
           </div>
           <div class="metric-chip">
             <span class="label">MA20</span>
             <span class="value">${ma20}</span>
+          </div>
+          <div class="metric-chip">
+            <span class="label">MA50</span>
+            <span class="value">${ma50}</span>
           </div>
 
           <!-- Smart Money badge -->
@@ -933,20 +1843,40 @@
               : `<span class="feat-off">— Gap Up</span>`
             }
           </div>
+
+          <!-- MTF badge -->
+          ${mtfBadgeHTML}
         </div>
 
-        <div class="card-divider"></div>
+        <!-- REASON TAGS -->
+        ${reasonTagsHTML}
 
-        ${tradePlan}
-        ${riskMgt}
+        <div class="card-divider" style="margin-top:12px;"></div>
+        ${planPreview}
+        ${aiSummary}
 
-        <!-- AI SECTION -->
-        <div class="card-ai">
-          <div class="ai-label">🤖 Analisa AI</div>
-          <p class="ai-text">${ai}</p>
+        <!-- VIEW DETAIL BUTTON -->
+        <div style="padding:12px 22px 18px;">
+          <button onclick="window.open('/analysis/' + encodeURIComponent('${s.ticker || ""}'), '_blank')" style="
+            width:100%; padding:10px;
+            background:var(--surface-2); border:1px solid var(--border-2);
+            border-radius:10px; color:var(--text-muted);
+            font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
+            cursor:pointer; transition:all 0.2s;
+            display:flex; align-items:center; justify-content:center; gap:6px;
+          " onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border-2)';this.style.color='var(--text-muted)'">
+            📋 Lihat Detail Analisa
+          </button>
         </div>
       </article>`;
     }).join('');
+
+    // Tampilkan info jumlah jika ada lebih dari yang ditampilkan
+    if (!_showAll && filtered.length > 5) {
+      grid.innerHTML += `<div class="state-block" style="padding:24px;">
+        <p style="font-size:13px;">Menampilkan <strong>5</strong> dari <strong>${filtered.length}</strong> saham. <a href="#" onclick="event.preventDefault();toggleShowAll()" style="color:var(--accent);text-decoration:none;font-weight:600;">Lihat semua →</a></p>
+      </div>`;
+    }
   }
 
   function updateStats(signals) {
@@ -970,20 +1900,53 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      const signals = data.signals || [];
+      const signals    = data.signals || [];
+      const marketOpen = data.market_open ?? null;
+      const scanning   = data.scanning   ?? false;
 
-      // Stats dihitung dari semua saham yang berhasil dianalisis
+      // Market status banner — jujur sesuai kondisi nyata
+      const banner = document.getElementById('market-banner');
+      if (signals.length > 0) {
+        // Ada data — tampilkan status bursa
+        if (marketOpen === true) {
+          banner.style.display = 'flex';
+          banner.className = 'open';
+          banner.innerHTML = '🟢 <strong>Bursa IDX BUKA</strong> &nbsp;— data real-time aktif';
+        } else {
+          banner.style.display = 'flex';
+          banner.className = 'closed';
+          banner.innerHTML = '🔵 <strong>Bursa IDX TUTUP</strong> &nbsp;— menampilkan data analisis terakhir yang tersimpan';
+        }
+      } else if (scanning) {
+        // Sedang scan, belum ada data
+        banner.style.display = 'flex';
+        banner.className = 'closed';
+        banner.innerHTML = '⏳ <strong>Sedang melakukan scan saham...</strong> &nbsp;Halaman akan otomatis refresh saat data siap.';
+      } else {
+        banner.style.display = 'none';
+      }
+
+      // Simpan ke state global
+      _allSignals = sortSignals(signals);
+
+      // Stats & filter counts
       updateStats(signals);
+      updateFilterCounts(signals);
 
-      // Cards hanya tampilkan Top 5 (sort dilakukan di renderCards)
-      renderCards(signals);
+      // Render cards dengan filter & show-all state
+      renderCards(_allSignals, scanning);
 
-      const top5count = Math.min(5, signals.length);
+      const dispCount = _showAll ? signals.length : Math.min(5, signals.length);
       const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      lastUpdate.textContent = `Terakhir diperbarui: ${now} WIB • Top ${top5count} dari ${signals.length} saham`;
+      if (signals.length > 0) {
+        lastUpdate.textContent = `Terakhir diperbarui: ${now} WIB • ${dispCount} dari ${signals.length} saham`;
+      } else {
+        lastUpdate.textContent = '';
+      }
 
       setStatus('live', 'Live');
-      secondsLeft = REFRESH_INTERVAL + 1;
+      // Jika sedang scan dan belum ada data, refresh lebih cepat (setiap 15 detik)
+      secondsLeft = (scanning && signals.length === 0) ? 15 : REFRESH_INTERVAL + 1;
 
     } catch (err) {
       console.error(err);
@@ -1035,12 +1998,7 @@
   let currentSymbol   = 'IDX:BBCA';
   let currentInterval = 'D';
 
-  const SYMBOL_MAP = {
-    'BBCA': 'IDX:BBCA',
-    'BBRI': 'IDX:BBRI',
-    'TLKM': 'IDX:TLKM',
-    'ASII': 'IDX:ASII',
-  };
+  // SYMBOL_MAP dihapus — generate IDX: prefix secara dinamis dari ticker apapun
 
   function setInterval_(interval) {
     currentInterval = interval;
@@ -1080,15 +2038,15 @@
       'allowtransparency="true" allowfullscreen></iframe>';
   }
 
-  // Klik kartu sinyal → pindah chart ke saham tersebut
+  // Klik kartu sinyal → pindah chart ke saham tersebut (dinamis, tanpa hardcode)
   document.getElementById('cards-grid').addEventListener('click', e => {
     const card = e.target.closest('.signal-card');
     if (!card) return;
     const tickerEl = card.querySelector('.card-ticker');
     if (!tickerEl) return;
-    const ticker = tickerEl.textContent.trim();
-    const tvSymbol = SYMBOL_MAP[ticker];
-    if (!tvSymbol) return;
+
+    const rawTicker = tickerEl.textContent.trim().split('.')[0];
+    const tvSymbol = 'IDX:' + rawTicker;
 
     const sel = document.getElementById('stock-select');
     if (sel) sel.value = tvSymbol;
