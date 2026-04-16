@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Dashboard analisis saham real-time dengan indikator teknikal dan analisis AI" />
+  <title>Stock Analyzer — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ====== RESET & BASE ====== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0a0d14;
+      --surface:    #111520;
+      --surface-2:  #181e2e;
+      --border:     rgba(255,255,255,0.07);
+      --border-2:   rgba(255,255,255,0.12);
+
+      --buy:        #00d97e;
+      --buy-dim:    rgba(0, 217, 126, 0.12);
+      --sell:       #ff4d6d;
+      --sell-dim:   rgba(255, 77, 109, 0.12);
+      --hold:       #6c7af0;
+      --hold-dim:   rgba(108, 122, 240, 0.12);
+
+      --accent:     #6c7af0;
+      --accent-dim: rgba(108, 122, 240, 0.15);
+      --gold:       #f5c518;
+      --text:       #e2e8f0;
+      --text-muted: #64748b;
+      --text-dim:   #94a3b8;
+
+      --radius:     16px;
+      --radius-sm:  10px;
+      --shadow:     0 4px 32px rgba(0,0,0,0.5);
+      --glow-buy:   0 0 24px rgba(0, 217, 126, 0.2);
+      --glow-sell:  0 0 24px rgba(255, 77, 109, 0.2);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ====== ANIMATED BG ====== */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 15% 20%, rgba(108,122,240,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 35% at 85% 75%, rgba(0,217,126,0.05) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ====== HEADER ====== */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,13,20,0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+    }
+
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .logo-icon {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--accent), #00d97e);
+      border-radius: 8px;
+      display: grid; place-items: center;
+      font-size: 16px;
+    }
+    .logo-text {
+      font-size: 17px; font-weight: 700;
+      background: linear-gradient(90deg, var(--text), #94a3b8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      letter-spacing: -0.3px;
+    }
+
+    .header-right {
+      display: flex; align-items: center; gap: 12px;
+    }
+
+    #status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.4s;
+    }
+    #status-dot.live { background: var(--buy); box-shadow: 0 0 8px var(--buy); }
+    #status-dot.loading { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+    #status-dot.error  { background: var(--sell); }
+
+    #status-label {
+      font-size: 12px; font-weight: 500;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* countdown ring */
+    #refresh-wrap {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .ring-svg { transform: rotate(-90deg); }
+    .ring-bg { fill: none; stroke: var(--border-2); stroke-width: 2.5; }
+    .ring-fg {
+      fill: none; stroke: var(--accent); stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-dasharray: 50.27;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1s linear;
+    }
+    #countdown-label {
+      font-size: 11px; font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-dim);
+      min-width: 20px;
+    }
+
+    /* ====== MAIN CONTENT ====== */
+    main {
+      position: relative; z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+
+    /* ====== STATS BAR ====== */
+    #stats-bar {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px; margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px 20px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; }
+    .stat-value { font-size: 22px; font-weight: 700; }
+
+    /* ====== SECTION HEADER ====== */
+    .section-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 13px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .section-line { flex: 1; height: 1px; background: var(--border); }
+
+    /* ====== CARDS GRID ====== */
+    #cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 20px;
+    }
+
+    /* ====== SIGNAL CARD ====== */
+    .signal-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+      animation: fadeIn 0.4s ease both;
+    }
+    .signal-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-2);
+    }
+    .signal-card.BUY { border-top: 3px solid var(--buy); box-shadow: var(--glow-buy); }
+    .signal-card.SELL { border-top: 3px solid var(--sell); box-shadow: var(--glow-sell); }
+    .signal-card.HOLD { border-top: 3px solid var(--hold); }
+
+    .card-header {
+      padding: 20px 22px 14px;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px;
+    }
+    .card-left { display: flex; flex-direction: column; gap: 4px; }
+    .card-rank {
+      font-size: 10px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .card-ticker {
+      font-size: 26px; font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--text), #94a3b8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .card-price {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px; font-weight: 500;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .badge-signal {
+      padding: 6px 14px;
+      border-radius: 50px;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .badge-signal.BUY  { background: var(--buy-dim);  color: var(--buy); }
+    .badge-signal.SELL { background: var(--sell-dim); color: var(--sell); }
+    .badge-signal.HOLD { background: var(--hold-dim); color: var(--hold); }
+
+    /* ====== METRICS ROW ====== */
+    .card-metrics {
+      padding: 0 22px 16px;
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+
+    .metric-chip {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px;
+    }
+    .metric-chip .label { color: var(--text-muted); }
+    .metric-chip .value { font-weight: 600; }
+
+    /* ====== RANK BADGE ====== */
+    .rank-badge {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px 0;
+      margin-bottom: -4px;
+    }
+    .rank-medal { font-size: 20px; line-height: 1; }
+    .rank-label {
+      font-size: 11px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .rank-badge.rank-1 .rank-label { color: #ffd700; }
+    .rank-badge.rank-2 .rank-label { color: #c0c0c0; }
+    .rank-badge.rank-3 .rank-label { color: #cd7f32; }
+
+    /* ====== SCORE BAR ====== */
+    .score-bar-wrap {
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 22px 10px;
+    }
+    .score-bar-track {
+      flex: 1; height: 5px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.6s cubic-bezier(.4,0,.2,1);
+    }
+    .score-bar-label {
+      font-size: 11px; white-space: nowrap;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .score-bar-label strong { color: var(--text); }
+
+    /* ====== BADGE FEATURE (Smart Money & Gap Up) ====== */
+    .badge-feature {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      transition: all 0.2s;
+    }
+    .badge-feature strong { font-weight: 700; }
+    .badge-feature .feat-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-left: 2px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .badge-feature .feat-off { color: var(--text-muted); }
+
+    /* Smart Money ON */
+    .sm-on {
+      background: rgba(245,197,24,0.08);
+      border-color: rgba(245,197,24,0.3);
+      color: #f5c518;
+    }
+    .sm-on strong { color: #f5c518; }
+
+    /* Gap Up ON */
+    .gu-on {
+      background: rgba(0,217,126,0.08);
+      border-color: rgba(0,217,126,0.3);
+      color: var(--buy);
+    }
+    .gu-on strong { color: var(--buy); }
+
+    /* OFF state */
+    .sm-off, .gu-off { opacity: 0.45; }
+
+
+    /* ====== DIVIDER ====== */
+    .card-divider { height: 1px; background: var(--border); margin: 0 22px; }
+
+    /* ====== TRADE PLAN ====== */
+    .trade-plan {
+      margin: 0 22px 16px;
+      padding: 14px 0 0;
+    }
+    .trade-plan-label {
+      font-size: 10px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 10px;
+    }
+    .trade-plan-values {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .trade-plan-item {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      min-width: 0;
+    }
+    .trade-plan-item .label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 4px;
+    }
+    .trade-plan-item .value {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .trade-plan-item.tp .value { color: var(--buy); }
+    .trade-plan-item.sl .value { color: var(--sell); }
+
+    /* ====== AI ANALYSIS ====== */
+    .card-ai {
+      padding: 14px 22px 20px;
+    }
+    .ai-label {
+      font-size: 10px; font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 8px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .ai-label::before {
+      content: '';
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .ai-text {
+      font-size: 13px; line-height: 1.7;
+      color: var(--text-dim);
+    }
+
+    /* ====== EMPTY / LOADING / ERROR STATES ====== */
+    .state-block {
+      grid-column: 1 / -1;
+      padding: 80px 24px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .state-block .emoji { font-size: 40px; margin-bottom: 16px; }
+    .state-block p { font-size: 14px; line-height: 1.7; }
+
+    .skeleton { animation: shimmer 1.6s infinite; }
+    @keyframes shimmer {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ====== TIMESTAMP ====== */
+    #last-update {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 32px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ====== ANIMATIONS ====== */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ====== CHART SECTION ====== */
+    #chart-section {
+      margin-bottom: 36px;
+    }
+
+    .chart-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .chart-title {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .chart-title-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, var(--accent), #00d97e);
+      border-radius: 6px;
+      display: grid; place-items: center;
+      font-size: 13px; flex-shrink: 0;
+    }
+    .chart-title-text {
+      font-size: 13px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+
+    .chart-controls {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+
+    /* Custom dropdown */
+    .select-wrap {
+      position: relative;
+    }
+    .select-wrap::after {
+      content: '▾';
+      position: absolute; right: 12px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 11px;
+      pointer-events: none;
+    }
+    #stock-select {
+      appearance: none;
+      -webkit-appearance: none;
+      background: var(--surface);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600;
+      padding: 9px 32px 9px 14px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #stock-select:hover, #stock-select:focus {
+      border-color: var(--accent);
+    }
+    #stock-select option {
+      background: #1a1f2e;
+    }
+
+    /* Interval chips */
+    .interval-group {
+      display: flex; gap: 4px;
+    }
+    .interval-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; font-weight: 600;
+      padding: 6px 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .interval-btn:hover { border-color: var(--accent); color: var(--text); }
+    .interval-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Chart container */
+    #tv-chart-wrap {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #131722;
+      height: 460px;
+    }
+    #tv-chart-wrap .tv-chart-loader {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+      font-size: 13px;
+      background: #131722;
+      z-index: 10;
+      transition: opacity 0.4s;
+    }
+    #tv-chart-wrap .tv-chart-loader .spin {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #tradingview_widget_container { width: 100%; height: 100%; }
+
+    /* ====== RESPONSIVE ====== */
+    @media (max-width: 600px) {
+      .header-inner { height: 56px; }
+      #cards-grid { grid-template-columns: 1fr; }
+      #stats-bar  { grid-template-columns: 1fr 1fr; }
+      main { padding: 20px 16px 48px; }
+      #tv-chart-wrap { height: 320px; }
+      .chart-toolbar { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">📈</div>
+      <span class="logo-text">Stock Analyzer</span>
+    </div>
+    <div class="header-right">
+      <div id="refresh-wrap" title="Refresh setiap 10 detik">
+        <svg class="ring-svg" width="20" height="20" viewBox="0 0 20 20">
+          <circle class="ring-bg" cx="10" cy="10" r="8"/>
+          <circle class="ring-fg" id="ring-fg" cx="10" cy="10" r="8"/>
+        </svg>
+        <span id="countdown-label">10</span>
+      </div>
+      <div id="status-dot"></div>
+      <span id="status-label">Menghubungkan...</span>
+    </div>
+  </div>
+</header>
+
+<!-- ===== MAIN ===== -->
+<main>
+
+  <!-- Stats Bar -->
+  <div id="stats-bar">
+    <div class="stat-card">
+      <span class="stat-label">Total Saham</span>
+      <span class="stat-value" id="stat-total">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Sinyal BUY</span>
+      <span class="stat-value" style="color:var(--buy)" id="stat-buy">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Sinyal SELL</span>
+      <span class="stat-value" style="color:var(--sell)" id="stat-sell">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Smart Money 🔥</span>
+      <span class="stat-value" style="color:var(--gold)" id="stat-sm">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Gap Up 🚀</span>
+      <span class="stat-value" style="color:var(--buy)" id="stat-gap">—</span>
+    </div>
+  </div>
+
+  <!-- ===== TRADINGVIEW CHART SECTION ===== -->
+  <section id="chart-section">
+
+    <div class="chart-toolbar">
+      <div class="chart-title">
+        <div class="chart-title-icon">📊</div>
+        <span class="chart-title-text">Chart TradingView</span>
+      </div>
+
+      <div class="chart-controls">
+        <!-- Interval selector -->
+        <div class="interval-group" id="interval-group">
+          <button class="interval-btn" data-interval="1"   onclick="setInterval_('1')">1m</button>
+          <button class="interval-btn" data-interval="5"   onclick="setInterval_('5')">5m</button>
+          <button class="interval-btn" data-interval="15"  onclick="setInterval_('15')">15m</button>
+          <button class="interval-btn" data-interval="60"  onclick="setInterval_('60')">1h</button>
+          <button class="interval-btn active" data-interval="D" onclick="setInterval_('D')">1D</button>
+          <button class="interval-btn" data-interval="W"   onclick="setInterval_('W')">1W</button>
+        </div>
+
+        <!-- Stock dropdown -->
+        <div class="select-wrap">
+          <select id="stock-select" onchange="onStockChange(this.value)">
+            <option value="IDX:BBCA">BBCA — Bank Central Asia</option>
+            <option value="IDX:BBRI">BBRI — Bank BRI</option>
+            <option value="IDX:TLKM">TLKM — Telkom Indonesia</option>
+            <option value="IDX:ASII">ASII — Astra International</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart container -->
+    <div id="tv-chart-wrap">
+      <div id="tradingview_widget_container"></div>
+    </div>
+
+  </section>
+
+  <!-- Section Header Signals -->
+  <div class="section-header">
+    <span class="section-title">Top Sinyal Saham</span>
+    <div class="section-line"></div>
+  </div>
+
+  <!-- Cards Grid -->
+  <div id="cards-grid">
+    <div class="state-block skeleton">
+      <div class="emoji">⏳</div>
+      <p>Memuat data analisis saham...<br/>Mohon tunggu sebentar.</p>
+    </div>
+  </div>
+
+  <!-- Last Updated -->
+  <p id="last-update"></p>
+
+</main>
+
+<script>
+  /* ───────────────────────────────────────────
+     COUNTDOWN + RING ANIMATION
+  ─────────────────────────────────────────── */
+  const REFRESH_INTERVAL = 10; // detik
+  const CIRCUMFERENCE = 2 * Math.PI * 8; // r=8  ≈ 50.27
+
+  const ringFg         = document.getElementById('ring-fg');
+  const countdownLabel = document.getElementById('countdown-label');
+  const statusDot      = document.getElementById('status-dot');
+  const statusLabel    = document.getElementById('status-label');
+  const lastUpdate     = document.getElementById('last-update');
+
+  ringFg.style.strokeDasharray  = CIRCUMFERENCE;
+  ringFg.style.strokeDashoffset = '0';
+
+  let secondsLeft = REFRESH_INTERVAL;
+
+  function tickCountdown() {
+    secondsLeft--;
+    if (secondsLeft < 0) secondsLeft = REFRESH_INTERVAL;
+
+    countdownLabel.textContent = secondsLeft;
+    const offset = CIRCUMFERENCE * (1 - secondsLeft / REFRESH_INTERVAL);
+    ringFg.style.strokeDashoffset = offset;
+
+    if (secondsLeft === 0) fetchSignals();
+  }
+
+  setInterval(tickCountdown, 1000);
+
+  /* ───────────────────────────────────────────
+     FETCH & RENDER
+  ─────────────────────────────────────────── */
+  function setStatus(state, text) {
+    statusDot.className   = state;
+    statusLabel.textContent = text;
+  }
+
+  function formatPrice(p) {
+    if (p == null) return '—';
+    return 'Rp ' + Number(p).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function hasTradePlan(s) {
+    return s.entry != null || s.tp != null || s.sl != null;
+  }
+
+  /* ─── helper: sort signals sama seperti bot ─── */
+  function sortSignals(signals) {
+    return [...signals].sort((a, b) => {
+      const scoreDiff = (b.score ?? 0) - (a.score ?? 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      const smDiff = (b.smart_money ? 1 : 0) - (a.smart_money ? 1 : 0);
+      if (smDiff !== 0) return smDiff;
+      return (b.gap_up ? 1 : 0) - (a.gap_up ? 1 : 0);
+    });
+  }
+
+  function renderCards(signals) {
+    const grid = document.getElementById('cards-grid');
+
+    if (!signals || signals.length === 0) {
+      grid.innerHTML = `<div class="state-block">
+        <div class="emoji">🔍</div>
+        <p>Belum ada sinyal tersedia saat ini.<br/>Bot mungkin menunggu jam bursa buka.</p>
+      </div>`;
+      return;
+    }
+
+    // Sort by score DESC → smart_money → gap_up, ambil Top 5
+    const sorted = sortSignals(signals);
+    const top5   = sorted.slice(0, 5);
+
+    const RANK_MEDALS  = ['🥇', '🥈', '🥉', '🏅', '🏅'];
+    const RANK_LABELS  = ['#1 Terbaik', '#2', '#3', '#4', '#5'];
+
+    grid.innerHTML = top5.map((s, i) => {
+      const sig     = s.signal || 'HOLD';
+      const sm      = s.smart_money === true;
+      const gap     = s.gap_up === true;
+      const rsi     = s._meta?.rsi  != null ? Number(s._meta.rsi).toFixed(1) : '—';
+      const ma20    = s._meta?.ma20 != null ? Number(s._meta.ma20).toFixed(0) : '—';
+      const score   = s.score ?? 0;
+      const ai      = s.ai_analysis || s.ai || '—';
+      const smLabel = s._meta?.volume_label || (sm ? 'AKTIF' : '');
+      const smConf  = s._meta?.sm_confidence != null ? (s._meta.sm_confidence * 100).toFixed(0) + '%' : '';
+      const guConf  = s._meta?.gap_confidence || '';
+      const tradePlan = hasTradePlan(s) ? `
+        <div class="trade-plan">
+          <div class="trade-plan-label">Trade Plan</div>
+          <div class="trade-plan-values">
+            <div class="trade-plan-item entry">
+              <span class="label">Entry</span>
+              <span class="value">${formatPrice(s.entry)}</span>
+            </div>
+            <div class="trade-plan-item tp">
+              <span class="label">TP</span>
+              <span class="value">${formatPrice(s.tp)}</span>
+            </div>
+            <div class="trade-plan-item sl">
+              <span class="label">SL</span>
+              <span class="value">${formatPrice(s.sl)}</span>
+            </div>
+          </div>
+        </div>` : '';
+
+      const riskMgt = (s.lot != null && s.risk_amount != null) ? `
+        <div class="trade-plan" style="padding-top:0;">
+          <div class="trade-plan-label">Risk Management</div>
+          <div class="trade-plan-values" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+            <div class="trade-plan-item">
+              <span class="label">Position Size</span>
+              <span class="value" style="color:var(--text);">${s.lot} lot</span>
+            </div>
+            <div class="trade-plan-item">
+              <span class="label">Risk</span>
+              <span class="value" style="color:var(--text);">${s.risk_amount >= 1000 ? Math.round(s.risk_amount / 1000) + 'k' : s.risk_amount}</span>
+            </div>
+          </div>
+        </div>` : '';
+
+      const medal    = RANK_MEDALS[i]  || '🏅';
+      const rankLbl  = RANK_LABELS[i]  || `#${i+1}`;
+
+      // Score bar (maks 8)
+      const scorePct = Math.min(100, Math.round((score / 8) * 100));
+      const scoreColor = score >= 6 ? '#00d97e' : score >= 4 ? '#f59e0b' : '#64748b';
+
+      // Signal CSS class
+      const sigClass = sig === 'BUY' ? 'BUY' : sig === 'SELL' ? 'SELL' : 'HOLD';
+
+      return `
+      <article class="signal-card ${sigClass}" style="animation-delay:${i * 0.07}s" data-rank="${i+1}">
+
+        <!-- RANK BADGE -->
+        <div class="rank-badge rank-${i+1}">
+          <span class="rank-medal">${medal}</span>
+          <span class="rank-label">${rankLbl}</span>
+        </div>
+
+        <!-- HEADER -->
+        <div class="card-header">
+          <div class="card-left">
+            <span class="card-ticker">${s.ticker || '—'}</span>
+            <span class="card-price">${formatPrice(s.harga ?? s.price)}</span>
+          </div>
+          <span class="badge-signal ${sigClass}">${sig}</span>
+        </div>
+
+        <!-- SCORE BAR -->
+        <div class="score-bar-wrap">
+          <div class="score-bar-track">
+            <div class="score-bar-fill" style="width:${scorePct}%;background:${scoreColor}"></div>
+          </div>
+          <span class="score-bar-label">Score <strong>${score}</strong>/8</span>
+        </div>
+
+        <!-- METRICS ROW -->
+        <div class="card-metrics">
+          <div class="metric-chip">
+            <span class="label">RSI</span>
+            <span class="value">${rsi}</span>
+          </div>
+          <div class="metric-chip">
+            <span class="label">MA20</span>
+            <span class="value">${ma20}</span>
+          </div>
+
+          <!-- Smart Money badge -->
+          <div class="badge-feature ${sm ? 'sm-on' : 'sm-off'}">
+            ${sm
+              ? `🔥 <strong>Smart Money</strong><span class="feat-sub">${smLabel}${smConf ? ' · ' + smConf : ''}</span>`
+              : `<span class="feat-off">— Smart Money</span>`
+            }
+          </div>
+
+          <!-- Gap Up badge -->
+          <div class="badge-feature ${gap ? 'gu-on' : 'gu-off'}">
+            ${gap
+              ? `🚀 <strong>Gap Up</strong><span class="feat-sub">${guConf || 'DETECTED'}</span>`
+              : `<span class="feat-off">— Gap Up</span>`
+            }
+          </div>
+        </div>
+
+        <div class="card-divider"></div>
+
+        ${tradePlan}
+        ${riskMgt}
+
+        <!-- AI SECTION -->
+        <div class="card-ai">
+          <div class="ai-label">🤖 Analisa AI</div>
+          <p class="ai-text">${ai}</p>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  function updateStats(signals) {
+    if (!signals) return;
+    const buy  = signals.filter(s => s.signal === 'BUY').length;
+    const sell = signals.filter(s => s.signal === 'SELL').length;
+    const sm   = signals.filter(s => s.smart_money).length;
+    const gap  = signals.filter(s => s.gap_up).length;
+
+    document.getElementById('stat-total').textContent = signals.length;
+    document.getElementById('stat-buy').textContent   = buy;
+    document.getElementById('stat-sell').textContent  = sell;
+    document.getElementById('stat-sm').textContent    = sm;
+    document.getElementById('stat-gap').textContent   = gap;
+  }
+
+  async function fetchSignals() {
+    setStatus('loading', 'Memperbarui...');
+    try {
+      const res  = await fetch('/signals');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      const signals = data.signals || [];
+
+      // Stats dihitung dari semua saham yang berhasil dianalisis
+      updateStats(signals);
+
+      // Cards hanya tampilkan Top 5 (sort dilakukan di renderCards)
+      renderCards(signals);
+
+      const top5count = Math.min(5, signals.length);
+      const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      lastUpdate.textContent = `Terakhir diperbarui: ${now} WIB • Top ${top5count} dari ${signals.length} saham`;
+
+      setStatus('live', 'Live');
+      secondsLeft = REFRESH_INTERVAL + 1;
+
+    } catch (err) {
+      console.error(err);
+      setStatus('error', 'Gagal memuat');
+      document.getElementById('cards-grid').innerHTML = `
+        <div class="state-block">
+          <div class="emoji">⚠️</div>
+          <p>Gagal terhubung ke API.<br/>Pastikan server <code>python app.py</code> berjalan.<br/><small style="color:var(--text-muted)">${err.message}</small></p>
+        </div>`;
+    }
+  }
+
+  // Initial load
+  fetchSignals();
+
+  /* ───────────────────────────────────────────
+     TRADINGVIEW EMBED WIDGET
+  ─────────────────────────────────────────── */
+  let currentSymbol   = 'IDX:BBCA';
+  let currentInterval = 'D';
+
+  const SYMBOL_MAP = {
+    'BBCA': 'IDX:BBCA',
+    'BBRI': 'IDX:BBRI',
+    'TLKM': 'IDX:TLKM',
+    'ASII': 'IDX:ASII',
+  };
+
+  function setInterval_(interval) {
+    currentInterval = interval;
+    document.querySelectorAll('.interval-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.interval === interval);
+    });
+    buildChart(currentSymbol, currentInterval);
+  }
+
+  function onStockChange(symbol) {
+    currentSymbol = symbol;
+    buildChart(currentSymbol, currentInterval);
+  }
+
+  function buildChart(symbol, interval) {
+    const container = document.getElementById('tradingview_widget_container');
+
+    // TradingView widgetembed iframe — works on any domain including localhost
+    const src = 'https://s.tradingview.com/widgetembed/?' +
+      'symbol=' + encodeURIComponent(symbol) +
+      '&interval=' + encodeURIComponent(interval) +
+      '&hidesidetoolbar=0' +
+      '&symboledit=0' +
+      '&saveimage=0' +
+      '&toolbarbg=131722' +
+      '&studies=RSI%40tv-basicstudies' +
+      '&studies=MASimple%40tv-basicstudies' +
+      '&theme=dark' +
+      '&style=1' +
+      '&timezone=Asia%2FJakarta' +
+      '&locale=id' +
+      '&utm_source=localhost';
+
+    container.innerHTML =
+      '<iframe id="tv-iframe" src="' + src + '" ' +
+      'style="width:100%;height:100%;border:none;" ' +
+      'allowtransparency="true" allowfullscreen></iframe>';
+  }
+
+  // Klik kartu sinyal → pindah chart ke saham tersebut
+  document.getElementById('cards-grid').addEventListener('click', e => {
+    const card = e.target.closest('.signal-card');
+    if (!card) return;
+    const tickerEl = card.querySelector('.card-ticker');
+    if (!tickerEl) return;
+    const ticker = tickerEl.textContent.trim();
+    const tvSymbol = SYMBOL_MAP[ticker];
+    if (!tvSymbol) return;
+
+    const sel = document.getElementById('stock-select');
+    if (sel) sel.value = tvSymbol;
+
+    document.getElementById('chart-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    currentSymbol = tvSymbol;
+    buildChart(currentSymbol, currentInterval);
+  });
+
+  // Initial chart load
+  buildChart(currentSymbol, currentInterval);
+</script>
+</body>
+</html>
