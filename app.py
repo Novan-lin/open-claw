@@ -37,6 +37,7 @@ from entry_plan import generate_trade_plan, validate_rrr
 from risk_management import calculate_position_size
 from mtf_analysis import analyze_multi_timeframe
 from tuner import load_best_params
+import trade_logger
 
 # Muat parameter terbaik (fallback ke RSI=14, MA 20/50 jika file belum ada)
 _BEST_PARAMS = load_best_params()
@@ -875,8 +876,143 @@ def get_stock_detail(ticker):
 
 
 # ============================================================
+# WINRATE & PAPER TRADING ENDPOINTS
+# ============================================================
+
+@app.route("/winrate", methods=["GET"])
+def winrate_page():
+    """Sajikan halaman winrate & paper trading."""
+    return send_from_directory(".", "winrate.html")
+
+
+@app.route("/api/paper-trades", methods=["GET"])
+def get_paper_trades():
+    """
+    GET /api/paper-trades
+    Kembalikan statistik paper trading + equity curve + semua trades.
+    """
+    try:
+        stats = trade_logger.get_stats()
+        return jsonify({"status": "success", "data": stats})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# State untuk backtest async
+_backtest_state: dict = {"status": "idle", "result": None, "error": None}
+_backtest_lock = threading.Lock()
+
+
+@app.route("/api/backtest", methods=["POST"])
+def run_backtest_endpoint():
+    """
+    POST /api/backtest
+    Body JSON (opsional): {"tickers": ["BBCA", "TLKM"], "period": "6mo"}
+    Jalankan backtest di background. Gunakan GET /api/backtest/status untuk hasilnya.
+    """
+    global _backtest_state
+
+    with _backtest_lock:
+        if _backtest_state.get("status") == "running":
+            return jsonify({"status": "busy", "message": "Backtest sedang berjalan."}), 409
+
+    body = request.get_json(silent=True) or {}
+    tickers_req = body.get("tickers")
+
+    # Jika tidak ada tickers di body → pakai semua ticker dari signals.json
+    if not tickers_req:
+        with _cache_lock:
+            cached = list(_signals_cache)
+        tickers_req = list({
+            (s.get("ticker") or "").upper().split(".")[0]
+            for s in cached
+            if (s.get("ticker") or "").strip()
+        })
+
+    if not tickers_req:
+        tickers_req = ["BBCA", "BBRI", "TLKM", "BMRI", "ASII"]
+
+    period = body.get("period", "6mo")
+
+    def _worker():
+        global _backtest_state
+        with _backtest_lock:
+            _backtest_state = {"status": "running", "result": None, "error": None,
+                               "started_at": datetime.now().isoformat(),
+                               "total": len(tickers_req), "done": 0}
+
+        try:
+            from backtest import run_backtest_batch
+            result = run_backtest_batch(tickers_req)
+
+            with _backtest_lock:
+                _backtest_state = {
+                    "status":      "done",
+                    "result":      result,
+                    "error":       None,
+                    "finished_at": datetime.now().isoformat(),
+                    "tickers":     tickers_req,
+                }
+        except Exception as e:
+            with _backtest_lock:
+                _backtest_state = {
+                    "status": "error",
+                    "result": None,
+                    "error":  str(e),
+                }
+
+    threading.Thread(target=_worker, daemon=True, name="backtest-worker").start()
+    return jsonify({"status": "started", "message": f"Backtest dimulai untuk {len(tickers_req)} ticker."})
+
+
+@app.route("/api/backtest/status", methods=["GET"])
+def backtest_status():
+    """
+    GET /api/backtest/status
+    Kembalikan status atau hasil backtest terbaru.
+    """
+    with _backtest_lock:
+        state = dict(_backtest_state)
+
+    if state.get("status") == "done" and state.get("result"):
+        result = state["result"]
+        # Sederhanakan agar JSON-serializable
+        ranking = result.get("ranking", [])
+        combined = result.get("combined", {})
+        per_stock = {
+            tk: {
+                "winrate":       p.get("winrate", 0),
+                "avg_profit":    p.get("avg_profit", 0),
+                "total_return":  p.get("total_return", 0),
+                "max_drawdown":  p.get("max_drawdown", 0),
+                "profit_factor": p.get("profit_factor"),
+                "total_trades":  p.get("total_trades", 0),
+                "wins":          p.get("wins", 0),
+                "losses":        p.get("losses", 0),
+            }
+            for tk, p in result.get("per_stock", {}).items()
+        }
+        return jsonify({
+            "status":      "done",
+            "per_stock":   per_stock,
+            "ranking":     ranking,
+            "combined":    combined,
+            "tickers":     state.get("tickers", []),
+            "finished_at": state.get("finished_at"),
+        })
+
+    return jsonify({
+        "status":  state.get("status", "idle"),
+        "error":   state.get("error"),
+        "total":   state.get("total", 0),
+        "done":    state.get("done", 0),
+    })
+
+
+# ============================================================
 # ENTRY POINT
 # ============================================================
+
 
 if __name__ == "__main__":
     print("\n" + "=" * 55)

@@ -18,7 +18,7 @@ from stock_filter import is_stock_eligible
 from stock_list import get_stock_list
 from entry_plan import generate_trade_plan, validate_rrr
 from risk_management import calculate_position_size
-from trade_logger import monitor_active_trades
+from trade_logger import monitor_active_trades, add_if_not_active, check_and_close
 from mtf_analysis import analyze_multi_timeframe
 from tuner import load_best_params, auto_tune, BEST_PARAMS_FILE
 
@@ -720,6 +720,37 @@ def main():
                             _save_incremental(hasil_saham)
                         except Exception as e_inc:
                             print(f"  -> [WARN] Gagal simpan inkremental: {e_inc}")
+
+                        # ── PAPER TRADING AUTO-LOGGER ──────────────────────
+                        try:
+                            current_price = hasil_saham.get('harga')
+                            sig_now       = hasil_saham.get('signal', 'HOLD')
+                            entry_p       = hasil_saham.get('entry')
+                            tp_p          = hasil_saham.get('tp')
+                            sl_p          = hasil_saham.get('sl')
+
+                            # Auto-log BUY signal ke paper trades
+                            if sig_now == "BUY" and entry_p and tp_p and sl_p:
+                                added = add_if_not_active(
+                                    ticker      = clean,
+                                    entry       = entry_p,
+                                    tp          = tp_p,
+                                    sl          = sl_p,
+                                    score       = hasil_saham.get('score'),
+                                    rsi         = hasil_saham.get('rsi'),
+                                    smart_money = bool(hasil_saham.get('smart_money')),
+                                    signal_reason = hasil_saham.get('alasan', []),
+                                )
+                                if not added:
+                                    # Sudah aktif → cek TP/SL dengan harga terbaru
+                                    if current_price:
+                                        check_and_close(clean, current_price)
+                            elif current_price:
+                                # Bukan BUY → tetap cek apakah hit TP/SL
+                                check_and_close(clean, current_price)
+                        except Exception as e_pt:
+                            print(f"  -> [WARN] Paper trading hook error: {e_pt}")
+
 
                 except Exception as e:
                     error_list.append(clean)

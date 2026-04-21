@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Analyzer — Winrate & Paper Trading</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0a0d14;
+      --surface:    #111520;
+      --surface-2:  #181e2e;
+      --border:     rgba(255,255,255,0.07);
+      --border-2:   rgba(255,255,255,0.12);
+      --buy:        #00d97e;
+      --buy-dim:    rgba(0, 217, 126, 0.12);
+      --sell:       #ff4d6d;
+      --sell-dim:   rgba(255, 77, 109, 0.12);
+      --hold:       #6c7af0;
+      --hold-dim:   rgba(108, 122, 240, 0.12);
+      --accent:     #6c7af0;
+      --accent-dim: rgba(108, 122, 240, 0.15);
+      --gold:       #f5c518;
+      --text:       #e2e8f0;
+      --text-muted: #64748b;
+      --text-dim:   #94a3b8;
+      --radius:     16px;
+      --radius-sm:  10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      padding-bottom: 60px;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-2);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+    .header-logo {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+    .header-title { font-size: 16px; font-weight: 600; color: var(--text); }
+    .header-sep { color: var(--text-muted); margin: 0 4px; }
+    .header-sub { font-size: 13px; color: var(--text-dim); }
+    .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer; border: none; transition: .15s;
+      font-family: inherit;
+    }
+    .btn-accent { background: var(--accent); color: white; }
+    .btn-accent:hover { background: #7d8cf2; }
+    .btn-ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-2); }
+    .btn-ghost:hover { background: var(--accent-dim); border-color: var(--accent); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .back-link {
+      color: var(--text-muted); text-decoration: none; font-size: 13px;
+      display: flex; align-items: center; gap: 4px; padding: 4px 8px;
+      border-radius: 6px; transition: .15s;
+    }
+    .back-link:hover { color: var(--text); background: var(--surface-2); }
+
+    /* ── MAIN LAYOUT ── */
+    main { max-width: 1280px; margin: 0 auto; padding: 28px 24px; }
+    .section-title {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      letter-spacing: 0.3px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title span.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+
+    /* ── STATS GRID ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 18px;
+      display: flex; flex-direction: column; gap: 6px;
+      transition: border-color .2s;
+    }
+    .stat-card:hover { border-color: var(--border-2); }
+    .stat-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
+    .stat-value { font-size: 28px; font-weight: 800; font-family: 'JetBrains Mono', monospace; line-height: 1.1; }
+    .stat-sub { font-size: 12px; color: var(--text-muted); }
+    .stat-card.win  .stat-value { color: var(--buy); }
+    .stat-card.loss .stat-value { color: var(--sell); }
+    .stat-card.neutral .stat-value { color: var(--text); }
+    .stat-card.accent .stat-value { color: var(--accent); }
+
+    /* Winrate ring */
+    .winrate-ring-wrap {
+      display: flex; align-items: center; justify-content: center;
+      gap: 32px; margin-bottom: 28px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px 24px;
+    }
+    .ring-container { position: relative; width: 160px; height: 160px; }
+    .ring-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .ring-bg   { fill: none; stroke: var(--surface-2); stroke-width: 14; }
+    .ring-fill { fill: none; stroke: var(--buy); stroke-width: 14; stroke-linecap: round;
+                 transition: stroke-dashoffset 1s ease; }
+    .ring-fill.neutral { stroke: var(--hold); }
+    .ring-text {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .ring-pct { font-size: 30px; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: var(--buy); }
+    .ring-pct.neutral { color: var(--hold); }
+    .ring-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .ring-details { display: flex; flex-direction: column; gap: 10px; }
+    .ring-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
+    .ring-row strong { color: var(--text); font-weight: 600; }
+    .badge-win  { background: var(--buy-dim);  color: var(--buy);  padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+    .badge-loss { background: var(--sell-dim); color: var(--sell); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+    .badge-hold { background: var(--hold-dim); color: var(--hold); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+
+    /* ── EQUITY CURVE ── */
+    .chart-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 18px; margin-bottom: 28px;
+    }
+    .chart-canvas { width: 100%; height: 200px; display: block; }
+
+    /* ── TABLES ── */
+    .table-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; margin-bottom: 28px;
+    }
+    .table-header {
+      padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .table-header-title { font-size: 14px; font-weight: 700; }
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl th {
+      padding: 10px 16px; text-align: left;
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      background: var(--surface-2); border-bottom: 1px solid var(--border);
+    }
+    .tbl td {
+      padding: 11px 16px; border-bottom: 1px solid var(--border);
+      font-size: 13px; color: var(--text-dim);
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl tr:hover td { background: rgba(255,255,255,.025); }
+    .tbl td.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    .tbl td.ticker { font-weight: 700; color: var(--text); font-size: 14px; }
+    .sig-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 5px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+    }
+    .sig-win  { background: var(--buy-dim);  color: var(--buy);  }
+    .sig-loss { background: var(--sell-dim); color: var(--sell); }
+    .sig-active { background: var(--hold-dim); color: var(--hold); }
+    .pl-pos { color: var(--buy);  font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .pl-neg { color: var(--sell); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+    /* ── BACKTEST SECTION ── */
+    .backtest-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: 28px;
+    }
+    .backtest-header {
+      padding: 20px 20px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .backtest-body { padding: 20px; }
+    .backtest-info { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+    .backtest-status {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600; padding: 4px 10px;
+      border-radius: 6px; background: var(--surface-2);
+    }
+    .backtest-status.running { color: var(--gold); background: rgba(245,197,24,.1); }
+    .backtest-status.done    { color: var(--buy);  background: var(--buy-dim); }
+    .backtest-status.error   { color: var(--sell); background: var(--sell-dim); }
+    .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:.3; } }
+
+    /* empty state */
+    .empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 52px 20px; color: var(--text-muted); gap: 8px;
+    }
+    .empty-icon { font-size: 36px; }
+    .empty-text { font-size: 14px; }
+
+    /* Per-ticker backtest grid */
+    .bt-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px; margin-top: 16px;
+    }
+    .bt-card {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 14px 14px;
+    }
+    .bt-card-ticker { font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 8px; }
+    .bt-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); padding: 2px 0; }
+    .bt-row .val { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    .bt-row .val.pos { color: var(--buy); }
+    .bt-row .val.neg { color: var(--sell); }
+
+    /* ── REFRESH INDICATOR ── */
+    .refresh-info { font-size: 11px; color: var(--text-muted); text-align: right; margin-bottom: 12px; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      main { padding: 16px 12px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .winrate-ring-wrap { flex-direction: column; gap: 20px; }
+      header { padding: 14px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-logo">📈 OpenClaw</div>
+  <span class="header-sep">/</span>
+  <div class="header-title">Winrate & Paper Trading</div>
+  <div class="header-actions">
+    <a href="/" class="back-link">← Dashboard</a>
+    <button class="btn btn-ghost" id="btnRefresh" onclick="loadPaperTrades()">⟳ Refresh</button>
+    <button class="btn btn-accent" id="btnBacktest" onclick="runBacktest()">🔬 Jalankan Backtest</button>
+  </div>
+</header>
+
+<main>
+  <div class="refresh-info" id="lastRefresh">Memuat data...</div>
+
+  <!-- ── WINRATE RING + SUMMARY ── -->
+  <div class="section-title"><span class="dot"></span> Performa Keseluruhan (Paper Trading)</div>
+  <div class="winrate-ring-wrap" id="ringSection">
+    <div class="ring-container">
+      <svg class="ring-svg" viewBox="0 0 120 120">
+        <circle class="ring-bg"   cx="60" cy="60" r="50"/>
+        <circle class="ring-fill" id="ringFill" cx="60" cy="60" r="50"
+                stroke-dasharray="314.16" stroke-dashoffset="314.16"/>
+      </svg>
+      <div class="ring-text">
+        <div class="ring-pct" id="ringPct">0%</div>
+        <div class="ring-sub">Winrate</div>
+      </div>
+    </div>
+    <div class="ring-details" id="ringDetails">
+      <div class="empty-text" style="color:var(--text-muted)">Belum ada trade tertutup.</div>
+    </div>
+  </div>
+
+  <!-- ── STAT CARDS ── -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card neutral">
+      <div class="stat-label">Total Trade Selesai</div>
+      <div class="stat-value" id="statTotal">0</div>
+      <div class="stat-sub" id="statActive">0 aktif</div>
+    </div>
+    <div class="stat-card win">
+      <div class="stat-label">Win</div>
+      <div class="stat-value" id="statWins">0</div>
+      <div class="stat-sub" id="statAvgWin">Avg win: -</div>
+    </div>
+    <div class="stat-card loss">
+      <div class="stat-label">Loss</div>
+      <div class="stat-value" id="statLosses">0</div>
+      <div class="stat-sub" id="statAvgLoss">Avg loss: -</div>
+    </div>
+    <div class="stat-card win">
+      <div class="stat-label">Total Return</div>
+      <div class="stat-value" id="statReturn">+0%</div>
+      <div class="stat-sub" id="statPF">PF: -</div>
+    </div>
+    <div class="stat-card loss">
+      <div class="stat-label">Max Drawdown</div>
+      <div class="stat-value" id="statDD">0%</div>
+      <div class="stat-sub" id="statBestWorst">-</div>
+    </div>
+  </div>
+
+  <!-- ── EQUITY CURVE ── -->
+  <div class="section-title"><span class="dot"></span> Equity Curve</div>
+  <div class="chart-wrap">
+    <canvas class="chart-canvas" id="equityCanvas"></canvas>
+  </div>
+
+  <!-- ── ACTIVE TRADES ── -->
+  <div class="section-title"><span class="dot"></span> Trade Aktif</div>
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-header-title">Posisi Terbuka</div>
+      <div id="activeCount" style="font-size:12px;color:var(--text-muted)">—</div>
+    </div>
+    <div id="activeBody">
+      <div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Belum ada trade aktif.</div></div>
+    </div>
+  </div>
+
+  <!-- ── CLOSED TRADES ── -->
+  <div class="section-title"><span class="dot"></span> Riwayat Trade</div>
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-header-title">Trade Tertutup</div>
+      <div id="closedCount" style="font-size:12px;color:var(--text-muted)">—</div>
+    </div>
+    <div id="closedBody">
+      <div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Belum ada trade yang selesai.</div></div>
+    </div>
+  </div>
+
+  <!-- ── PER-TICKER BREAKDOWN ── -->
+  <div id="byTickerSection" style="display:none">
+    <div class="section-title"><span class="dot"></span> Breakdown Per Saham</div>
+    <div class="bt-grid" id="byTickerGrid"></div>
+  </div>
+
+  <!-- ── BACKTEST SECTION ── -->
+  <div class="section-title" style="margin-top:16px"><span class="dot"></span> Backtest Historis (6 Bulan)</div>
+  <div class="backtest-wrap">
+    <div class="backtest-header">
+      <div>
+        <div style="font-size:14px;font-weight:700">Uji Algoritma pada Data Historis</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Jalankan backtest untuk melihat performa strategi pada data harga masa lalu.</div>
+      </div>
+      <div class="backtest-status" id="btStatus">Idle</div>
+    </div>
+    <div class="backtest-body">
+      <div class="backtest-info">
+        Klik <strong style="color:var(--accent)">Jalankan Backtest</strong> di header untuk menguji algoritma pada semua saham yang ada di dashboard. Proses berjalan di background — hasilnya akan muncul otomatis di bawah.
+      </div>
+      <div id="btResults" style="margin-top:16px"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// UTILITY
+// ═══════════════════════════════════════════════════════
+const fmt = (n, d=2) => n == null ? '-' : parseFloat(n).toFixed(d);
+const fmtSign = (n, d=2) => {
+  if (n == null) return '-';
+  const v = parseFloat(n);
+  return (v >= 0 ? '+' : '') + v.toFixed(d) + '%';
+};
+const plClass = (n) => n == null ? '' : parseFloat(n) >= 0 ? 'pl-pos' : 'pl-neg';
+const el = (id) => document.getElementById(id);
+
+// ═══════════════════════════════════════════════════════
+// PAPER TRADES
+// ═══════════════════════════════════════════════════════
+async function loadPaperTrades() {
+  el('btnRefresh').disabled = true;
+  try {
+    const res = await fetch('/api/paper-trades');
+    const json = await res.json();
+    if (json.status !== 'success') throw new Error(json.message || 'Error');
+    renderPaperTrades(json.data);
+    el('lastRefresh').textContent = 'Diperbarui: ' + new Date().toLocaleTimeString('id-ID');
+  } catch (e) {
+    el('lastRefresh').textContent = 'Gagal memuat data: ' + e.message;
+  } finally {
+    el('btnRefresh').disabled = false;
+  }
+}
+
+function renderPaperTrades(d) {
+  const total    = d.total_closed || 0;
+  const active   = d.total_active || 0;
+  const wins     = d.wins || 0;
+  const losses   = d.losses || 0;
+  const winrate  = d.winrate || 0;
+  const totalRet = d.total_return ?? 0;
+  const dd       = d.max_drawdown ?? 0;
+  const pf       = d.profit_factor;
+  const best     = d.best_trade;
+  const worst    = d.worst_trade;
+  const avgWin   = d.avg_win ?? 0;
+  const avgLoss  = d.avg_loss ?? 0;
+
+  // Ring
+  const circumference = 314.16;
+  const filled = total > 0 ? circumference * (winrate / 100) : 0;
+  const fill = el('ringFill');
+  fill.style.strokeDashoffset = (circumference - filled).toFixed(2);
+  if (winrate < 40)      fill.className = 'ring-fill neutral';
+  else                   fill.className = 'ring-fill';
+
+  const ringPct = el('ringPct');
+  ringPct.textContent = winrate.toFixed(1) + '%';
+  ringPct.className   = 'ring-pct' + (winrate < 40 ? ' neutral' : '');
+
+  el('ringDetails').innerHTML = total === 0
+    ? '<div class="empty-text" style="color:var(--text-muted)">Belum ada trade tertutup.</div>'
+    : `
+      <div class="ring-row"><span class="badge-win">WIN</span>  <strong>${wins}</strong> trade</div>
+      <div class="ring-row"><span class="badge-loss">LOSS</span><strong>${losses}</strong> trade</div>
+      <div class="ring-row"><span>Avg Win</span>   <strong style="color:var(--buy)">${fmtSign(avgWin)}</strong></div>
+      <div class="ring-row"><span>Avg Loss</span>  <strong style="color:var(--sell)">${fmtSign(avgLoss)}</strong></div>
+      <div class="ring-row"><span>Best</span>      <strong style="color:var(--buy)">${fmtSign(best)}</strong></div>
+      <div class="ring-row"><span>Worst</span>     <strong style="color:var(--sell)">${fmtSign(worst)}</strong></div>
+    `;
+
+  // Stat cards
+  el('statTotal').textContent  = total;
+  el('statActive').textContent = active + ' aktif';
+  el('statWins').textContent   = wins;
+  el('statAvgWin').textContent = 'Avg win: ' + fmtSign(avgWin);
+  el('statLosses').textContent = losses;
+  el('statAvgLoss').textContent= 'Avg loss: ' + fmtSign(avgLoss);
+
+  const retEl = el('statReturn');
+  retEl.textContent = fmtSign(totalRet);
+  retEl.parentElement.className = 'stat-card ' + (totalRet >= 0 ? 'win' : 'loss');
+
+  el('statDD').textContent     = fmt(dd) + '%';
+  el('statPF').textContent     = 'PF: ' + (pf != null ? parseFloat(pf).toFixed(2) : 'N/A');
+  el('statBestWorst').textContent = `Best: ${fmtSign(best)} | Worst: ${fmtSign(worst)}`;
+
+  // Equity curve
+  drawEquity(d.equity_curve || [100]);
+
+  // Active trades
+  const activeTrades = d.active_trades || [];
+  el('activeCount').textContent = activeTrades.length + ' posisi terbuka';
+  if (activeTrades.length === 0) {
+    el('activeBody').innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Belum ada trade aktif.</div></div>';
+  } else {
+    el('activeBody').innerHTML = `
+      <table class="tbl">
+        <thead><tr>
+          <th>Saham</th><th>Entry</th><th>TP</th><th>SL</th><th>Score</th><th>Dibuka</th>
+        </tr></thead>
+        <tbody>
+          ${activeTrades.map(t => `
+            <tr>
+              <td class="ticker">${t.ticker}</td>
+              <td class="mono">${fmt(t.entry, 0)}</td>
+              <td class="mono" style="color:var(--buy)">${fmt(t.tp, 0)}</td>
+              <td class="mono" style="color:var(--sell)">${fmt(t.sl, 0)}</td>
+              <td class="mono">${t.score ?? '-'}</td>
+              <td class="mono">${t.date_opened ?? '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // Closed trades
+  const closedTrades = d.closed_trades || [];
+  el('closedCount').textContent = closedTrades.length + ' trade selesai';
+  if (closedTrades.length === 0) {
+    el('closedBody').innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Belum ada trade yang selesai.</div></div>';
+  } else {
+    el('closedBody').innerHTML = `
+      <table class="tbl">
+        <thead><tr>
+          <th>Saham</th><th>Hasil</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Ditutup</th>
+        </tr></thead>
+        <tbody>
+          ${closedTrades.map(t => `
+            <tr>
+              <td class="ticker">${t.ticker}</td>
+              <td><span class="sig-badge ${t.result === 'WIN' ? 'sig-win' : 'sig-loss'}">${t.result}</span></td>
+              <td class="mono">${fmt(t.entry, 0)}</td>
+              <td class="mono">${fmt(t.exit_price, 0)}</td>
+              <td class="${plClass(t.pl_pct)}">${fmtSign(t.pl_pct)}</td>
+              <td class="mono">${t.date_closed ?? '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // Per-ticker breakdown
+  const byTicker = d.by_ticker || {};
+  const tickers  = Object.keys(byTicker);
+  if (tickers.length > 0) {
+    el('byTickerSection').style.display = '';
+    el('byTickerGrid').innerHTML = tickers.map(tk => {
+      const s = byTicker[tk];
+      return `
+        <div class="bt-card">
+          <div class="bt-card-ticker">${tk}</div>
+          <div class="bt-row"><span>Total</span><span class="val">${s.total}</span></div>
+          <div class="bt-row"><span>Win/Loss</span><span class="val">${s.wins}/${s.losses}</span></div>
+          <div class="bt-row"><span>Winrate</span><span class="val ${s.winrate >= 50 ? 'pos' : 'neg'}">${s.winrate}%</span></div>
+          <div class="bt-row"><span>Avg P&L</span><span class="val ${s.avg_pl >= 0 ? 'pos' : 'neg'}">${fmtSign(s.avg_pl)}</span></div>
+        </div>`;
+    }).join('');
+  } else {
+    el('byTickerSection').style.display = 'none';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// EQUITY CURVE CANVAS
+// ═══════════════════════════════════════════════════════
+function drawEquity(curve) {
+  const canvas = el('equityCanvas');
+  const dpr    = window.devicePixelRatio || 1;
+  const W      = canvas.offsetWidth;
+  const H      = canvas.offsetHeight || 200;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  if (!curve || curve.length < 2) {
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'center'; ctx.font = '13px Inter';
+    ctx.fillText('Belum cukup data untuk equity curve', W/2, H/2);
+    return;
+  }
+
+  const pad  = { top: 16, right: 20, bottom: 28, left: 52 };
+  const cW   = W - pad.left - pad.right;
+  const cH   = H - pad.top  - pad.bottom;
+  const minV = Math.min(...curve);
+  const maxV = Math.max(...curve);
+  const range = maxV - minV || 1;
+
+  const xOf = (i) => pad.left + (i / (curve.length - 1)) * cW;
+  const yOf = (v) => pad.top  + (1 - (v - minV) / range) * cH;
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth   = 1;
+  for (let g = 0; g <= 4; g++) {
+    const y = pad.top + (g / 4) * cH;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+    const label = (maxV - (g / 4) * range).toFixed(1);
+    ctx.fillStyle = '#64748b'; ctx.font = '10px JetBrains Mono,monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(label, pad.left - 6, y + 4);
+  }
+
+  // Baseline 100
+  const baseY = yOf(100);
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, baseY); ctx.lineTo(W - pad.right, baseY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Area fill
+  const finalVal = curve[curve.length - 1];
+  const isPos    = finalVal >= 100;
+  const lineColor = isPos ? '#00d97e' : '#ff4d6d';
+
+  const grad = ctx.createLinearGradient(0, pad.top, 0, H - pad.bottom);
+  grad.addColorStop(0, isPos ? 'rgba(0,217,126,0.35)' : 'rgba(255,77,109,0.35)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), yOf(curve[0]));
+  for (let i = 1; i < curve.length; i++) ctx.lineTo(xOf(i), yOf(curve[i]));
+  ctx.lineTo(xOf(curve.length - 1), H - pad.bottom);
+  ctx.lineTo(xOf(0), H - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), yOf(curve[0]));
+  for (let i = 1; i < curve.length; i++) ctx.lineTo(xOf(i), yOf(curve[i]));
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth   = 2.5;
+  ctx.lineJoin    = 'round';
+  ctx.stroke();
+
+  // Final dot
+  ctx.beginPath();
+  ctx.arc(xOf(curve.length - 1), yOf(finalVal), 5, 0, Math.PI * 2);
+  ctx.fillStyle = lineColor;
+  ctx.fill();
+
+  // Labels
+  ctx.fillStyle = '#94a3b8'; ctx.font = '10px Inter'; ctx.textAlign = 'center';
+  ctx.fillText('Start', xOf(0), H - pad.bottom + 16);
+  ctx.fillText('Sekarang', xOf(curve.length - 1), H - pad.bottom + 16);
+}
+
+// ═══════════════════════════════════════════════════════
+// BACKTEST
+// ═══════════════════════════════════════════════════════
+let _btPollTimer = null;
+
+async function runBacktest() {
+  const btn = el('btnBacktest');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+  el('btStatus').className = 'backtest-status running';
+  el('btStatus').innerHTML = '<span class="pulse"></span> Berjalan...';
+  el('btResults').innerHTML = '<div style="color:var(--text-muted);font-size:13px">Mengunduh data historis dan menghitung sinyal... harap tunggu.</div>';
+
+  try {
+    const res = await fetch('/api/backtest', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    const json = await res.json();
+    if (json.status !== 'started' && json.status !== 'busy') throw new Error(json.message);
+    if (json.status === 'busy') {
+      el('btResults').innerHTML = '<div style="color:var(--gold);font-size:13px">Backtest sedang berjalan, harap tunggu...</div>';
+    }
+    _btPollTimer = setInterval(pollBacktest, 3000);
+  } catch (e) {
+    el('btStatus').className = 'backtest-status error';
+    el('btStatus').textContent = '✗ Error';
+    el('btResults').innerHTML = `<div style="color:var(--sell);font-size:13px">Error: ${e.message}</div>`;
+    btn.disabled = false; btn.textContent = '🔬 Jalankan Backtest';
+  }
+}
+
+async function pollBacktest() {
+  try {
+    const res  = await fetch('/api/backtest/status');
+    const json = await res.json();
+
+    if (json.status === 'running') return;  // masih jalan
+
+    clearInterval(_btPollTimer); _btPollTimer = null;
+    el('btnBacktest').disabled = false;
+    el('btnBacktest').textContent = '🔬 Jalankan Backtest';
+
+    if (json.status === 'error') {
+      el('btStatus').className = 'backtest-status error';
+      el('btStatus').textContent = '✗ Error';
+      el('btResults').innerHTML = `<div style="color:var(--sell);font-size:13px">Error: ${json.error}</div>`;
+      return;
+    }
+
+    if (json.status === 'done') {
+      el('btStatus').className = 'backtest-status done';
+      el('btStatus').textContent = '✓ Selesai';
+      renderBacktestResults(json);
+    }
+  } catch (e) {
+    // jaringan error, coba lagi
+  }
+}
+
+function renderBacktestResults(json) {
+  const perStock = json.per_stock || {};
+  const combined = json.combined  || {};
+  const tickers  = json.tickers   || Object.keys(perStock);
+
+  const combinedHtml = combined.total_trades > 0 ? `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <div class="stat-card win" style="flex:1;min-width:130px;padding:14px">
+        <div class="stat-label">Winrate Gabungan</div>
+        <div class="stat-value" style="font-size:22px">${fmt(combined.winrate, 1)}%</div>
+      </div>
+      <div class="stat-card neutral" style="flex:1;min-width:130px;padding:14px">
+        <div class="stat-label">Total Return</div>
+        <div class="stat-value" style="font-size:22px">${fmtSign(combined.total_return)}</div>
+      </div>
+      <div class="stat-card neutral" style="flex:1;min-width:130px;padding:14px">
+        <div class="stat-label">Total Trade</div>
+        <div class="stat-value" style="font-size:22px">${combined.total_trades}</div>
+      </div>
+      <div class="stat-card ${(combined.max_drawdown||0) > 15 ? 'loss':'neutral'}" style="flex:1;min-width:130px;padding:14px">
+        <div class="stat-label">Max Drawdown</div>
+        <div class="stat-value" style="font-size:22px">${fmt(combined.max_drawdown)}%</div>
+      </div>
+    </div>
+  ` : '';
+
+  const rows = tickers.map(tk => {
+    const s = perStock[tk] || {};
+    const wr = parseFloat(s.winrate || 0);
+    return `
+      <tr>
+        <td class="ticker">${tk}</td>
+        <td class="mono ${wr >= 50 ? 'pl-pos' : 'pl-neg'}">${fmt(wr, 1)}%</td>
+        <td class="${plClass(s.total_return)}">${fmtSign(s.total_return)}</td>
+        <td class="mono">${s.total_trades || 0}</td>
+        <td class="mono" style="color:var(--buy)">${s.wins || 0}</td>
+        <td class="mono" style="color:var(--sell)">${s.losses || 0}</td>
+        <td class="mono">${s.profit_factor != null ? parseFloat(s.profit_factor).toFixed(2) : '-'}</td>
+        <td class="mono" style="color:var(--sell)">${fmt(s.max_drawdown)}%</td>
+      </tr>`;
+  }).join('');
+
+  el('btResults').innerHTML = combinedHtml + (rows ? `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
+      Hasil backtest per saham — data 6 bulan terakhir:
+    </div>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr>
+          <th>Saham</th><th>Winrate</th><th>Total Return</th><th>Trades</th>
+          <th>Win</th><th>Loss</th><th>Profit Factor</th><th>Max DD</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  ` : '<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Tidak ada hasil backtest.</div></div>');
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT & AUTO-REFRESH
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  // Redraw equity on resize
+  loadPaperTrades();
+});
+
+// Cek apakah ada backtest yang sudah jalan
+async function checkBacktestStatus() {
+  try {
+    const res  = await fetch('/api/backtest/status');
+    const json = await res.json();
+    if (json.status === 'running') {
+      el('btStatus').className = 'backtest-status running';
+      el('btStatus').innerHTML = '<span class="pulse"></span> Berjalan...';
+      el('btnBacktest').disabled = true;
+      el('btnBacktest').textContent = '⏳ Running...';
+      _btPollTimer = setInterval(pollBacktest, 3000);
+    } else if (json.status === 'done') {
+      el('btStatus').className = 'backtest-status done';
+      el('btStatus').textContent = '✓ Selesai';
+      renderBacktestResults(json);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+loadPaperTrades();
+checkBacktestStatus();
+setInterval(loadPaperTrades, 60000);  // Auto-refresh tiap 60 detik
+</script>
+</body>
+</html>
