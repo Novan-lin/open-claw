@@ -610,7 +610,16 @@
     badge.textContent = sig;
     badge.className = 'badge-signal ' + sigClass;
     const scoreColor = score >= 6 ? 'var(--buy)' : score >= 4 ? '#f59e0b' : 'var(--text-muted)';
-    document.getElementById('top-score').innerHTML = `Score <span style="color:${scoreColor}">${score}</span>/8`;
+    document.getElementById('top-score').innerHTML = `Score <span style="color:${scoreColor}">${score}</span>/10`;
+
+    // RRR data
+    const rrr     = s.rrr || {};
+    const rrrVal  = rrr.rrr != null ? Number(rrr.rrr).toFixed(2) : null;
+    const rrrFlag = rrr.flag || '';
+    const sup20   = s._meta?.support_20 != null ? formatPrice(s._meta.support_20) : '—';
+    const res20   = s._meta?.resistance_20 != null ? formatPrice(s._meta.resistance_20) : '—';
+    const rrrColor = rrrFlag === 'BAD_RRR' ? 'var(--sell)' : rrrVal && Number(rrrVal) > 2.0 ? 'var(--buy)' : 'var(--text)';
+    const atrVal  = s._meta?.atr != null ? Number(s._meta.atr).toFixed(2) : '—';
 
     // Alasan tags
     const alasanArr = Array.isArray(alasan) ? alasan : (typeof alasan === 'string' && alasan !== '—' ? [alasan] : []);
@@ -635,6 +644,8 @@
             <div class="info-stat"><span class="label">Take Profit</span><span class="value tp-val">${formatPrice(s.tp)}</span></div>
             <div class="info-stat"><span class="label">Stop Loss</span><span class="value sl-val">${formatPrice(s.sl)}</span></div>
             ${s.lot != null ? `<div class="info-stat"><span class="label">Lot</span><span class="value">${s.lot}</span></div>` : ''}
+            <div class="info-stat"><span class="label">Support 20</span><span class="value">${sup20}</span></div>
+            <div class="info-stat"><span class="label">Resistance 20</span><span class="value">${res20}</span></div>
           </div>
           ${s.risk_amount != null ? `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">Risk: ${formatPrice(s.risk_amount)}</div>` : ''}
         </div>`;
@@ -667,10 +678,31 @@
                 <span class="label">RSI (14)</span>
                 <span class="value" style="color:${rsiVal != null ? (rsiVal > 70 ? 'var(--sell)' : rsiVal < 30 ? 'var(--buy)' : 'var(--text)') : 'var(--text)'}">${rsi} ${rsiVal != null ? (rsiVal > 70 ? '⚠️' : rsiVal < 30 ? '✅' : '') : ''}</span>
               </div>
-              <div class="info-stat"><span class="label">Score</span><span class="value" style="color:${scoreColor}">${score}/8</span></div>
+              <div class="info-stat"><span class="label">Score</span><span class="value" style="color:${scoreColor}">${score}/10</span></div>
+              <div class="info-stat"><span class="label">Multi-Strategy</span><span class="value" style="color:var(--accent);">${s.multi_confirmation || 'N/A'}</span></div>
               <div class="info-stat"><span class="label">MA20</span><span class="value">${ma20}</span></div>
               <div class="info-stat"><span class="label">MA50</span><span class="value">${ma50}</span></div>
               <div class="info-stat full"><span class="label">Trend</span><span class="value" style="color:${trendColor};font-size:12px;">${trendNote}</span></div>
+              <div class="info-stat"><span class="label">Support 20</span><span class="value">${sup20}</span></div>
+              <div class="info-stat"><span class="label">Resistance 20</span><span class="value">${res20}</span></div>
+              <div class="info-stat"><span class="label">ATR</span><span class="value">${atrVal}</span></div>
+              <div class="info-stat"><span class="label">RRR</span><span class="value" style="color:${rrrColor}">${rrrVal || '—'}${rrrFlag === 'BAD_RRR' ? ' ⚠️' : rrrVal && rrrVal > 2.0 ? ' ✅' : ''}</span></div>
+              ${(() => {
+                const macdH = s._meta?.macd_hist != null ? Number(s._meta.macd_hist).toFixed(4) : null;
+                const macdV = s._meta?.macd != null ? Number(s._meta.macd).toFixed(4) : null;
+                const macdSL = s._meta?.macd_signal_line != null ? Number(s._meta.macd_signal_line).toFixed(4) : null;
+                if (!macdH && !macdV) return '';
+                const macdColor = macdH != null ? (Number(macdH) > 0 ? 'var(--buy)' : 'var(--sell)') : 'var(--text)';
+                return `
+                  <div class="info-stat full" style="margin-top:4px;border-top:1px solid var(--border);padding-top:8px;">
+                    <span class="label">MACD (12,26,9)</span>
+                    <span class="value" style="font-family:'JetBrains Mono',monospace;font-size:11px;">
+                      ${macdV != null ? 'Line: ' + macdV : ''}
+                      ${macdSL != null ? ' · Signal: ' + macdSL : ''}
+                      ${macdH != null ? '<span style="color:' + macdColor + ';margin-left:4px;">Hist: ' + macdH + '</span>' : ''}
+                    </span>
+                  </div>`;
+              })()}
             </div>
           </div>
 
@@ -708,6 +740,39 @@
         ${alasanHTML}
       </div>
 
+      <!-- STRATEGY BREAKDOWN -->
+      ${(() => {
+        const sd = s._meta?.strategy_details;
+        if (!sd) return '';
+        const strategies = [
+          { key: 'rsi',       label: 'RSI Reversal' },
+          { key: 'bollinger', label: 'Bollinger Bands' },
+          { key: 'rsi_ma',   label: 'RSI + Moving Average' },
+          { key: 'macd',     label: 'MACD Momentum' },
+        ];
+        const rows = strategies.map(st => {
+          const d = sd[st.key];
+          if (!d) return '';
+          const sig2 = d.signal || 'HOLD';
+          const color = sig2 === 'BUY' ? 'var(--buy)' : sig2 === 'SELL' ? 'var(--sell)' : 'var(--text-muted)';
+          const icon = sig2 === 'BUY' ? '⬆️' : sig2 === 'SELL' ? '⬇️' : '⏸️';
+          return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+              <span style="font-weight:600;font-size:13px;color:var(--text)">${st.label}</span>
+              <span style="font-size:12px;font-weight:700;color:${color};background:${color}18;padding:2px 8px;border-radius:4px;">${icon} ${sig2}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">${d.alasan || '—'}</div>
+          </div>`;
+        }).join('');
+        return `<div class="section fade-in" style="animation-delay:0.18s;">
+          <div class="section-header">
+            <span class="section-title">📊 Detail Per Strategi</span>
+            <div class="section-line"></div>
+          </div>
+          <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:4px 18px;">${rows}</div>
+        </div>`;
+      })()}
+
       <!-- SMART MONEY ANALYSIS -->
       ${smAlasan !== '—' ? `
       <div class="section fade-in" style="animation-delay:0.2s;">
@@ -717,6 +782,29 @@
         </div>
         <div class="sm-box">${smAlasan}</div>
       </div>` : ''}
+
+      <!-- FINAL GATE -->
+      ${(() => {
+        const gate = s.gate;
+        if (!gate) return '';
+        const d = gate.decision || '—';
+        const icon = d === 'EXECUTE' ? '✅' : d === 'WAIT' ? '⏳' : '🚫';
+        const gateColor = d === 'EXECUTE' ? 'var(--buy)' : d === 'WAIT' ? '#f59e0b' : 'var(--sell)';
+        const reasons = (gate.alasan || []).map(a => {
+          const isBad = a.startsWith('BLOCK') || a.startsWith('WARNING');
+          return `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;color:${isBad ? (a.startsWith('BLOCK') ? 'var(--sell)' : '#f59e0b') : 'var(--buy)'}">${a}</div>`;
+        }).join('');
+        return `<div class="section fade-in" style="animation-delay:0.22s;">
+          <div class="section-header">
+            <span class="section-title">${icon} Final Gate</span>
+            <div class="section-line"></div>
+          </div>
+          <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 18px;">
+            <div style="font-size:15px;font-weight:700;color:${gateColor};margin-bottom:10px;">${icon} Keputusan: ${d}</div>
+            ${reasons || '<div style="color:var(--text-muted);font-size:13px;">Semua gate terpenuhi.</div>'}
+          </div>
+        </div>`;
+      })()}
 
       <!-- MTF -->
       ${buildMtfHTML(s._meta?.mtf)}

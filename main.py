@@ -10,24 +10,17 @@ from data import get_stock_data
 from indicator import calculate_indicators
 from ai_analyst import generate_ai_analysis, generate_market_outlook
 from notifier import format_telegram_message, send_telegram_message
-from scoring import calculate_score
+from scoring import calculate_score, smart_trade_decision
 from strategies import multi_strategy_confirmation
 from volume_analysis import analyze_volume
 from gap_detector import detect_gap
 from stock_filter import is_stock_eligible
 from stock_list import get_stock_list
-from entry_plan import generate_trade_plan
+from entry_plan import generate_trade_plan, validate_rrr
 from risk_management import calculate_position_size
 from trade_logger import monitor_active_trades
+from mtf_analysis import analyze_multi_timeframe
 from tuner import load_best_params, auto_tune, BEST_PARAMS_FILE
-
-# Memuat signal.py secara dinamis 
-import importlib.util
-spec = importlib.util.spec_from_file_location("local_signal", "signal.py")
-local_signal = importlib.util.module_from_spec(spec)
-sys.modules["local_signal"] = local_signal
-spec.loader.exec_module(local_signal)
-generate_signal = local_signal.generate_signal
 
 STATE_FILE = "last_signals.json"
 
@@ -42,24 +35,22 @@ def format_volume(vol):
         return f"{vol:.0f}"
 
 def is_market_open():
-    """Mengecek apakah saat ini jam aktif bursa (WIB)."""
+    """
+    Cek apakah sekarang jam bursa IDX (Senin-Jumat, 09:00-15:30 WIB).
+    Return (True/False, datetime_wib)
+    """
     wib_tz = timezone(timedelta(hours=7))
     now_wib = datetime.now(wib_tz)
-    
+
+    # Sabtu=5, Minggu=6
     if now_wib.weekday() >= 5:
         return False, now_wib
-        
-    waktu_sekarang = now_wib.time()
-    from datetime import time as dtime
-    
-    pagi_buka = dtime(9, 0)
-    pagi_tutup = dtime(12, 0)
-    siang_buka = dtime(13, 30)
-    siang_tutup = dtime(16, 0)
-    
-    if (pagi_buka <= waktu_sekarang <= pagi_tutup) or (siang_buka <= waktu_sekarang <= siang_tutup):
-        return True, now_wib
-    return False, now_wib
+
+    market_open = now_wib.replace(hour=9, minute=0, second=0, microsecond=0)
+    market_close = now_wib.replace(hour=15, minute=30, second=0, microsecond=0)
+
+    is_open = market_open <= now_wib <= market_close
+    return is_open, now_wib
 
 def load_signals():
     if os.path.exists(STATE_FILE):
@@ -75,6 +66,8 @@ def save_signals(data):
         json.dump(data, f, indent=4)
 
 SIGNALS_FILE = "signals.json"
+HISTORY_DIR  = "history"            # folder penyimpanan history harian
+os.makedirs(HISTORY_DIR, exist_ok=True)
 
 def get_env_float(name, default):
     try:
@@ -93,11 +86,126 @@ print(f"[CONFIG] Parameter aktif: RSI={_BEST_PARAMS['rsi']} | "
 
 TUNE_INTERVAL_SECONDS = 7 * 24 * 3600  # 1x per minggu
 TUNE_TICKER = "BBCA.JK"                 # Saham acuan untuk auto-tune
+SCAN_COOLDOWN = 1800                     # detik (30 menit) — rescan saat market buka
+SCAN_COOLDOWN_SHORT = 1800               # detik (30 menit) — cooldown minimum antar scan saham yang sama
+
+# Tracker waktu scan terakhir per ticker (in-memory, reset saat restart)
+_last_scanned: dict = {}  # {"BBCA": datetime, ...}
+
+def _get_existing_tickers() -> set:
+    """Ambil set ticker yang sudah punya data di signals.json."""
+    if not os.path.exists(SIGNALS_FILE):
+        return set()
+    try:
+        with open(SIGNALS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {s.get("ticker", "").upper() for s in data if s.get("ticker")}
+    except Exception:
+        return set()
+
+
+def _prioritize_stocks(daftar_saham: list, last_scanned: dict, force_all=False) -> list:
+    """
+    Urutkan saham berdasarkan prioritas scanning:
+    1. Saham yang belum pernah di-scan (belum ada di signals.json)
+    2. Saham yang sudah expired (> SCAN_COOLDOWN sejak terakhir scan)
+    3. Saham yang masih fresh (skip)
+    
+    force_all=True → bypass cooldown, scan semua (untuk first run / uji coba)
+    
+    Return: list of (ticker, priority_label)
+    """
+    if force_all:
+        return [(t, "FORCE - scan semua") for t in daftar_saham], []
+
+    wib_tz = timezone(timedelta(hours=7))
+    now = datetime.now(wib_tz)
+    existing = _get_existing_tickers()
+    
+    unscanned = []   # belum ada di signals.json sama sekali
+    expired = []     # sudah ada tapi data sudah > SCAN_COOLDOWN
+    fresh = []       # masih dalam cooldown
+    
+    for ticker in daftar_saham:
+        clean = ticker.split('.')[0].upper()
+        
+        # Cek apakah sudah punya data di signals.json
+        has_data = clean in existing
+        
+        # Cek cooldown dari in-memory tracker
+        last_ts = last_scanned.get(clean)
+        if last_ts:
+            age = (now - last_ts).total_seconds()
+            if age < SCAN_COOLDOWN_SHORT:
+                fresh.append((ticker, f"fresh ({int(age//60)}m ago)"))
+                continue
+            elif age < SCAN_COOLDOWN and has_data:
+                fresh.append((ticker, f"cooldown ({int(age//3600)}h ago)"))
+                continue
+        
+        if not has_data:
+            unscanned.append((ticker, "BARU - belum ada data"))
+        else:
+            expired.append((ticker, f"expired ({int(age//3600) if last_ts else '?'}h ago)" if last_ts else "no timestamp"))
+    
+    # Prioritas: unscanned dulu, lalu expired
+    return unscanned + expired, fresh
+
+
+def _is_valid_result(hasil: dict) -> bool:
+    """Cek apakah hasil scan punya data esensial (harga tidak null)."""
+    harga = hasil.get("harga") or hasil.get("price")
+    if harga is None:
+        return False
+    return True
+
+
+def _save_incremental(hasil_saham: dict):
+    """
+    Simpan satu hasil scan langsung ke signals.json (merge).
+    Dashboard langsung update tanpa menunggu seluruh siklus selesai.
+    TIDAK menimpa data lama jika data baru tidak valid (null semua).
+    """
+    wib_tz = timezone(timedelta(hours=7))
+
+    # Baca data existing
+    existing = []
+    if os.path.exists(SIGNALS_FILE):
+        try:
+            with open(SIGNALS_FILE, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except Exception:
+            existing = []
+
+    # Merge: ticker baru menimpa yang lama
+    merged = {}
+    for s in existing:
+        tk = s.get("ticker") or s.get("ticker", "")
+        if tk:
+            merged[tk] = s
+
+    tk = hasil_saham.get("ticker", "")
+    if tk:
+        # Jangan timpa data lama yang valid dengan data baru yang null
+        old = merged.get(tk)
+        if old and not _is_valid_result(hasil_saham):
+            old_price = old.get("price") or old.get("harga")
+            old_rsi = (old.get("_meta") or {}).get("rsi") or old.get("rsi")
+            if old_price is not None or old_rsi is not None:
+                print(f"  -> [PROTECT] {tk}: data baru null, data lama tetap dipertahankan.")
+                return
+        merged[tk] = hasil_saham
+
+    # Simpan
+    save_signals_json(list(merged.values()))
+    print(f"  -> [SAVED] {tk} langsung tersimpan ke signals.json ({len(merged)} total)")
+
 
 def save_signals_json(kumpulan_hasil: list):
     """
     Simpan hasil analisis ke signals.json dengan format bersih.
     Overwrite data lama setiap dipanggil.
+    Juga menyimpan salinan ke folder history harian.
     """
     wib_tz = timezone(timedelta(hours=7))
     output = []
@@ -125,28 +233,128 @@ def save_signals_json(kumpulan_hasil: list):
             return None
 
     for h in kumpulan_hasil:
-        price = safe_float(h.get('harga'))
+        # Support both raw format (from analyze_stock) and serialized format (from signals.json)
+        meta = h.get('_meta') or {}
+
+        def pick(raw_key, meta_key=None):
+            """Ambil nilai dari raw key, fallback ke _meta, fallback ke serialized top-level key."""
+            v = h.get(raw_key)
+            if v is not None:
+                return v
+            mk = meta_key or raw_key
+            return meta.get(mk)
+
+        price = safe_float(h.get('harga') or h.get('price'))
 
         output.append({
             "ticker":      h.get('ticker'),
             "price":       price,
             "signal":      h.get('signal'),
             "score":       h.get('score'),
+            "multi_confirmation": h.get('multi_confirmation', 'N/A'),
             "smart_money": h.get('smart_money', False),
             "gap_up":      h.get('gap_up', False),
-            "entry":       safe_float(h.get('entry')),
-            "tp":          safe_float(h.get('tp')),
-            "sl":          safe_float(h.get('sl')),
-            "lot":         safe_int(h.get('lot')),
-            "risk_amount": safe_float(h.get('risk_amount')),
-            "ai":          h.get('ai_analysis', '-')
+            "entry":       safe_float(pick('entry')),
+            "tp":          safe_float(pick('tp')),
+            "sl":          safe_float(pick('sl')),
+            "lot":         safe_int(pick('lot')),
+            "risk_amount": safe_float(pick('risk_amount')),
+            "ai":          h.get('ai_analysis') or h.get('ai') or '-',
+            "scanned_at":  h.get('scanned_at') or datetime.now(wib_tz).isoformat(),
+            "_meta": {
+                "rsi":              pick('rsi'),
+                "ma20":             pick('ma20'),
+                "ma50":             pick('ma50'),
+                "atr":              pick('atr'),
+                "support_20":       pick('support_20'),
+                "resistance_20":    pick('resistance_20'),
+                "volume_label":     pick('volume_label'),
+                "sm_confidence":    pick('sm_confidence'),
+                "sm_alasan":        pick('sm_alasan'),
+                "alasan":           pick('alasan'),
+                "gap_confidence":   h.get('confidence') or meta.get('gap_confidence'),
+                "mtf":              pick('mtf'),
+                "macd":             pick('macd'),
+                "macd_hist":        pick('macd_hist'),
+                "macd_signal_line": pick('macd_signal_line'),
+                "strategy_details": pick('strategy_details'),
+            },
+            "rrr": h.get('rrr'),
+            "gate": h.get('gate'),
         })
 
-    with open(SIGNALS_FILE, "w", encoding="utf-8") as f:
+    tmp_file = SIGNALS_FILE + ".tmp"
+    with open(tmp_file, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=4, ensure_ascii=False)
+    os.replace(tmp_file, SIGNALS_FILE)
+
+    # Simpan ke history harian
+    _save_history(output)
 
     print(f">>> [signals.json] Tersimpan: {len(output)} saham | "
           f"{datetime.now(wib_tz).strftime('%H:%M:%S')} WIB")
+
+
+def _save_history(signals: list):
+    """Simpan salinan ke folder history (merge dengan data hari ini jika ada)."""
+    wib_tz = timezone(timedelta(hours=7))
+    today = datetime.now(wib_tz).strftime("%Y-%m-%d")
+    hist_file = os.path.join(HISTORY_DIR, f"signals_{today}.json")
+    ts = datetime.now(wib_tz).isoformat()
+
+    existing = []
+    if os.path.exists(hist_file):
+        try:
+            with open(hist_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                existing = data.get("signals", []) if isinstance(data, dict) else data
+        except Exception:
+            # File rusak — backup dulu
+            backup = hist_file + ".bak"
+            try:
+                import shutil
+                shutil.copy2(hist_file, backup)
+                print(f">>> [HISTORY] File rusak, backup: {backup}")
+            except Exception:
+                pass
+            existing = []
+
+    # Merge: data baru menimpa ticker yang sama
+    merged = {s.get("ticker"): s for s in existing}
+    for s in signals:
+        merged[s.get("ticker")] = s
+    merged_list = list(merged.values())
+
+    history_data = {
+        "date": today,
+        "last_updated": ts,
+        "total": len(merged_list),
+        "signals": merged_list,
+    }
+
+    tmp = hist_file + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(history_data, f, indent=4, ensure_ascii=False)
+    os.replace(tmp, hist_file)
+    print(f">>> [HISTORY] Tersimpan: {len(merged_list)} sinyal → {hist_file}")
+
+def _get_previous_signal(ticker_clean):
+    """Ambil sinyal & AI analysis terakhir dari signals.json untuk ticker ini."""
+    if not os.path.exists(SIGNALS_FILE):
+        return None, None
+    try:
+        with open(SIGNALS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for s in data:
+            tk = s.get("ticker", "").upper()
+            if tk == ticker_clean.upper():
+                sig = s.get("signal")
+                ai = s.get("ai_analysis") or s.get("ai_summary")
+                return sig, ai
+    except Exception:
+        pass
+    return None, None
+
 
 def analyze_stock(ticker):
     """
@@ -184,6 +392,9 @@ def analyze_stock(ticker):
         ma20 = indicators['ma20']
         ma50 = indicators['ma50']
         harga = indicators['close_price']
+        atr = indicators.get('atr')
+        support_20 = indicators.get('support_20')
+        resistance_20 = indicators.get('resistance_20')
 
         # Kalkulasi pergeseran Volume (Smart Money Tracker)
         volume_spike, avg_volume, current_volume, smart_money, volume_label, sm_confidence, sm_alasan = analyze_volume(df)
@@ -192,27 +403,28 @@ def analyze_stock(ticker):
         price_yesterday = df['Close'].iloc[-2] if len(df) > 1 else price_today
         gap_up, confidence = detect_gap(rsi, ma20, ma50, price_today, price_yesterday, smart_money)
 
-        signal_status, alasan_teknis = generate_signal(
-            rsi,
-            ma20,
-            ma50,
-            harga,
-            smart_money=smart_money,
-            gap_up=gap_up,
-            gap_confidence=confidence,
-        )
-        # Multi-strategy confirmation (bonus score jika 2+ strategi setuju)
+        # Multi-strategy confirmation (raw votes termasuk Smart Money & Gap Up)
         try:
-            mc = multi_strategy_confirmation(df)
-            mc_bonus  = mc["score_bonus"]
-            mc_signal = mc["signal"]
+            mc = multi_strategy_confirmation(
+                df,
+                smart_money=smart_money,
+                gap_up=gap_up,
+                gap_confidence=confidence,
+            )
         except Exception:
-            mc_bonus  = 0
-            mc_signal = "HOLD"
+            mc = None
 
-        score, alasan_skoring = calculate_score(
-            rsi, ma20, ma50, harga, smart_money, volume_label, gap_up, confidence,
-            multi_confirmation_bonus=mc_bonus,
+        # RRR validation sebelum scoring
+        rrr_data = validate_rrr(float(harga), support_20, resistance_20)
+
+        signal_status, score, alasan_skoring = calculate_score(
+            rsi, ma20, ma50, harga,
+            volume_label=volume_label,
+            mc_data=mc,
+            mode="STRICT",
+            atr=atr,
+            rrr_data=rrr_data,
+            macd_hist=indicators.get('macd_hist'),
         )
 
         entry = None
@@ -221,38 +433,80 @@ def analyze_stock(ticker):
         lot = None
         risk_amount = None
 
+        gate_result = None
         if signal_status == "BUY":
             high = float(df['High'].iloc[-1])
             low = float(df['Low'].iloc[-1])
             price = float(harga)
-            entry, tp, sl = generate_trade_plan(price, high, low, mode="range")
+            entry, tp, sl = generate_trade_plan(price, high, low, mode="range", atr=atr)
 
-            position = calculate_position_size(
-                capital=TRADE_CAPITAL,
-                risk_percent=RISK_PERCENT,
+            # ── FINAL GATE: cek RRR, volume, entry zone ──
+            gate_result = smart_trade_decision(
+                signal=signal_status,
+                rrr_data=rrr_data,
+                smart_money=smart_money,
+                volume_label=volume_label,
                 entry=entry,
-                stop_loss=sl,
+                tp=tp,
+                sl=sl,
             )
-            if position is not None:
-                lot, risk_amount = position
+
+            if gate_result["decision"] == "EXECUTE":
+                position = calculate_position_size(
+                    capital=TRADE_CAPITAL,
+                    risk_percent=RISK_PERCENT,
+                    entry=entry,
+                    stop_loss=sl,
+                )
+                if position is not None:
+                    lot, risk_amount = position
+            else:
+                # Gate menolak — override sinyal ke HOLD
+                alasan_skoring.extend(gate_result["alasan"])
+                signal_status = "HOLD"
+                entry = tp = sl = None
         
         rsi_display = f"{rsi:.2f}" if rsi is not None and not math.isnan(rsi) else "N/A"
+        mc_summary = f"BUY:{mc['total_buy_votes']} SELL:{mc['total_sell_votes']}" if mc else "N/A"
         print(f"Harga: {harga:.2f} | RSI: {rsi_display}")
-        print(f"Sinyal: {signal_status} | Skor: {score} | Multi-Conf: {mc_signal}")
+        print(f"Sinyal: {signal_status} | Skor: {score} | Multi-Conf: {mc_summary}")
 
-        # Minta analisis AI (Ollama - Mistral)
-        print(f"-> [AI] Menghasilkan analisis untuk {clean_ticker}...")
-        ai_text = generate_ai_analysis(
-            ticker=clean_ticker,
-            signal=signal_status,
-            rsi=rsi,
-            ma20=ma20,
-            ma50=ma50,
-            harga=harga,
-            entry=entry,
-            tp=tp,
-            sl=sl,
-        )
+        # 7. Multi-Timeframe Analysis
+        print(f"-> [MTF] Analisa multi-timeframe {clean_ticker}...")
+        try:
+            mtf = analyze_multi_timeframe(ticker)
+        except Exception as e_mtf:
+            print(f"-> [MTF] Gagal: {e_mtf}")
+            mtf = None
+
+        # Minta analisis AI — skip jika sinyal sama dengan scan sebelumnya
+        prev_signal, prev_ai = _get_previous_signal(clean_ticker)
+        if prev_signal == signal_status and prev_ai:
+            print(f"-> [AI] Skip — sinyal masih {signal_status}, pakai AI analysis sebelumnya")
+            ai_text = prev_ai
+        else:
+            if prev_signal and prev_signal != signal_status:
+                print(f"-> [AI] Sinyal berubah {prev_signal} → {signal_status}, regenerate AI...")
+            else:
+                print(f"-> [AI] Menghasilkan analisis untuk {clean_ticker}...")
+            ai_text = generate_ai_analysis(
+                ticker=clean_ticker,
+                signal=signal_status,
+                rsi=rsi,
+                ma20=ma20,
+                ma50=ma50,
+                harga=harga,
+                entry=entry,
+                tp=tp,
+                sl=sl,
+                score=score,
+                alasan_scoring=alasan_skoring,
+                smart_money=smart_money,
+                volume_label=volume_label,
+                gap_up=gap_up,
+                gap_confidence=confidence,
+                mtf=mtf,
+            )
         
         return {
             "ticker": clean_ticker,
@@ -260,9 +514,16 @@ def analyze_stock(ticker):
             "rsi": rsi,
             "ma20": ma20,
             "ma50": ma50,
+            "atr": atr,
+            "support_20": support_20,
+            "resistance_20": resistance_20,
+            "macd": indicators.get('macd'),
+            "macd_hist": indicators.get('macd_hist'),
+            "macd_signal_line": indicators.get('macd_signal'),
+            "strategy_details": mc.get('details') if mc else None,
             "signal": signal_status,
             "score": score,
-            "multi_confirmation": mc_signal,
+            "multi_confirmation": mc_summary,
             "alasan": alasan_skoring,
             "current_volume": current_volume,
             "avg_volume": avg_volume,
@@ -277,7 +538,10 @@ def analyze_stock(ticker):
             "sl": sl,
             "lot": lot,
             "risk_amount": risk_amount,
-            "ai_analysis": ai_text
+            "rrr": rrr_data,
+            "mtf": mtf,
+            "ai_analysis": ai_text,
+            "gate": gate_result,
         }
             
     except Exception as e:
@@ -297,6 +561,32 @@ def check_single_instance():
         sys.exit(1)
     except ImportError:
         pass 
+
+def load_persistent_cooldown() -> dict:
+    """Muat data cooldown dari signals.json agar bot tidak scan ulang semua saham saat restart."""
+    cooldown = {}
+    if not os.path.exists(SIGNALS_FILE):
+        return cooldown
+    try:
+        with open(SIGNALS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            return cooldown
+        for item in data:
+            ticker = item.get("ticker")
+            scanned_at = item.get("scanned_at", "")
+            if ticker and scanned_at:
+                try:
+                    ts = datetime.fromisoformat(scanned_at)
+                    cooldown[ticker] = ts
+                except (ValueError, TypeError):
+                    continue
+    except (json.JSONDecodeError, OSError):
+        pass
+    if cooldown:
+        print(f">>> [COOLDOWN] Dimuat {len(cooldown)} ticker dari signals.json")
+    return cooldown
+
 
 def main():
     check_single_instance()
@@ -318,7 +608,12 @@ def main():
     total_saham = len(daftar_saham)
 
     print(f"\n>>> Daftar scanning: {total_saham} saham dimuat dari stock_list.py")
-    
+
+    global _last_scanned
+    _last_scanned = load_persistent_cooldown()
+
+    _first_run = True   # Siklus pertama selalu scan (untuk testing/startup)
+
     while True:
         now_wib = datetime.now(wib_tz)
         print("\n\n" + "=" * 60)
@@ -357,7 +652,13 @@ def main():
                 print(f"  [AUTO-TUNE] Gagal: {_tune_err}")
             print("="*60)
 
-        should_scan = True
+        should_scan = open_status or _first_run
+
+        if _first_run and not open_status:
+            print("\n>>> [FIRST RUN] Market tutup, tapi siklus pertama tetap scan untuk uji coba.")
+        elif not should_scan:
+            print("\n>>> [SKIP] Market tutup — scan dilewati untuk hemat resource.")
+            print(">>> Dashboard tetap menampilkan data terakhir dari signals.json.")
 
         if should_scan:
             kumpulan_hasil = []
@@ -370,14 +671,34 @@ def main():
             except Exception as e:
                 print(f"[!] Error saat memantau trade aktif: {e}")
 
-            # --- FASE 1: Scanning Semua Saham ---
+            # --- FASE 1: Scanning Saham (Prioritas: belum ada data → expired) ---
             print(f"\n{'='*60}")
-            print(f"  FASE 1 — SCANNING {total_saham} SAHAM")
+            print(f"  FASE 1 — SCANNING (SMART PRIORITY)")
             print(f"{'='*60}")
 
-            for idx, target_saham in enumerate(daftar_saham, 1):
+            to_scan, skipped_fresh = _prioritize_stocks(daftar_saham, _last_scanned, force_all=_first_run)
+
+            if skipped_fresh:
+                print(f"\n  [INFO] {len(skipped_fresh)} saham di-skip (data masih fresh):")
+                for ticker, reason in skipped_fresh[:5]:
+                    print(f"    - {ticker.split('.')[0]}: {reason}")
+                if len(skipped_fresh) > 5:
+                    print(f"    ... dan {len(skipped_fresh) - 5} lainnya")
+
+            if not to_scan:
+                print(f"\n  [INFO] Semua {total_saham} saham sudah di-scan dan masih dalam cooldown.")
+                print(f"  [INFO] Rescan penuh berikutnya dalam ~{SCAN_COOLDOWN//3600} jam.")
+            else:
+                scan_total = len(to_scan)
+                print(f"\n  [QUEUE] {scan_total} saham perlu di-scan:")
+                for i, (ticker, reason) in enumerate(to_scan[:10]):
+                    print(f"    {i+1}. {ticker.split('.')[0]} — {reason}")
+                if scan_total > 10:
+                    print(f"    ... dan {scan_total - 10} lainnya")
+
+            for idx, (target_saham, priority_label) in enumerate(to_scan, 1):
                 clean = target_saham.split('.')[0]
-                print(f"\n[{idx:>2}/{total_saham}] Scanning {clean}...", flush=True)
+                print(f"\n[{idx:>2}/{len(to_scan)}] Scanning {clean} ({priority_label})...", flush=True)
 
                 try:
                     hasil_saham = analyze_stock(target_saham)
@@ -387,11 +708,18 @@ def main():
                         print(f"  -> [SKIP] {clean} tidak lolos filter atau data error.")
                     else:
                         kumpulan_hasil.append(hasil_saham)
+                        _last_scanned[clean] = datetime.now(wib_tz)  # Catat waktu scan
                         sig   = hasil_saham.get('signal', '?')
                         score = hasil_saham.get('score', 0)
                         sm    = 'SM:YES' if hasil_saham.get('smart_money') else 'SM:NO'
                         gu    = 'GU:YES' if hasil_saham.get('gap_up') else 'GU:NO'
                         print(f"  -> [OK] {clean} | Signal:{sig} Score:{score} {sm} {gu}")
+
+                        # Simpan langsung ke signals.json agar dashboard update real-time
+                        try:
+                            _save_incremental(hasil_saham)
+                        except Exception as e_inc:
+                            print(f"  -> [WARN] Gagal simpan inkremental: {e_inc}")
 
                 except Exception as e:
                     error_list.append(clean)
@@ -401,11 +729,13 @@ def main():
             # Ringkasan hasil scanning
             print(f"\n{'='*60}")
             print(f"  HASIL SCANNING SELESAI")
-            print(f"  Total   : {total_saham} saham")
-            print(f"  Berhasil: {len(kumpulan_hasil)} saham")
-            print(f"  Skip    : {len(skipped_list)} saham" +
+            print(f"  Total list : {total_saham} saham")
+            print(f"  Di-scan    : {len(to_scan)} saham")
+            print(f"  Berhasil   : {len(kumpulan_hasil)} saham")
+            print(f"  Skip(fresh): {len(skipped_fresh)} saham")
+            print(f"  Skip(fail) : {len(skipped_list)} saham" +
                   (f" ({', '.join(skipped_list)})" if skipped_list else ""))
-            print(f"  Error   : {len(error_list)} saham" +
+            print(f"  Error      : {len(error_list)} saham" +
                   (f" ({', '.join(error_list)})" if error_list else ""))
             print(f"{'='*60}")
             
@@ -583,16 +913,52 @@ def main():
                 last_signals_state[h['ticker'] + ".JK"] = h['signal']
             save_signals(last_signals_state)
 
-            # --- FASE 5: Simpan ke signals.json (overwrite setiap loop) ---
-            # Hanya timpa jika ada hasil — jaga data lama saat market tutup/scan gagal.
+            # --- FASE 5: Simpan ke signals.json (merge dengan data yang sudah ada) ---
             if kumpulan_hasil:
-                save_signals_json(kumpulan_hasil)
+                # Muat data lama dari signals.json dan gabungkan
+                existing_signals = []
+                if os.path.exists(SIGNALS_FILE):
+                    try:
+                        with open(SIGNALS_FILE, "r", encoding="utf-8") as f:
+                            existing_signals = json.load(f)
+                    except Exception:
+                        existing_signals = []
+                
+                # Merge: data baru menimpa ticker yang sama HANYA jika valid
+                merged = {}
+                for s in existing_signals:
+                    tk = s.get("ticker") or s.get("ticker", "")
+                    if tk:
+                        merged[tk] = s
+                for h in kumpulan_hasil:
+                    tk = h.get("ticker", "")
+                    if tk:
+                        old = merged.get(tk)
+                        if old and not _is_valid_result(h):
+                            # Data baru null, pertahankan data lama
+                            old_price = old.get("price") or old.get("harga")
+                            if old_price is not None:
+                                print(f"  -> [PROTECT] {tk}: data baru null di FASE 5, data lama dipertahankan.")
+                                continue
+                        merged[tk] = h
+                
+                # Simpan semua (merged), bukan hanya hasil siklus ini
+                save_signals_json(list(merged.values()))
             else:
                 print(">>> [signals.json] Scan kosong, data terakhir dipertahankan agar dashboard tetap tampil.")
             
-        print("\n[TIDUR] Menunggu 5 Menit (300 detik) untuk siklus selanjutnya... (Ctrl+C manual stop)")
+        _first_run = False  # Siklus pertama selesai, selanjutnya ikuti aturan market
+
+        # Tidur: 5 menit saat market buka, 30 menit saat market tutup
+        if open_status:
+            sleep_sec = 300
+            sleep_label = "5 menit"
+        else:
+            sleep_sec = 1800
+            sleep_label = "30 menit (market tutup)"
+        print(f"\n[TIDUR] Menunggu {sleep_label} ({sleep_sec} detik) untuk siklus selanjutnya... (Ctrl+C manual stop)")
         try:
-            time.sleep(300)
+            time.sleep(sleep_sec)
         except KeyboardInterrupt:
             print("\n\n[!] Eksekusi Shutdown Manual. Bot tidur selamanya.")
             sys.exit(0)

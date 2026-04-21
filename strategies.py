@@ -1,10 +1,11 @@
 ﻿"""
 strategies.py — Kumpulan Strategi Trading Teknikal
 ====================================================
-Berisi tiga strategi siap pakai:
+Berisi empat strategi siap pakai:
     1. rsi_strategy        — RSI Reversal (oversold/overbought + konfirmasi arah)
     2. bollinger_strategy  — Bollinger Bands squeeze & price touch
     3. rsi_ma_strategy     — Kombinasi RSI + Moving Average (konfirmasi ganda)
+    4. macd_strategy       — MACD Histogram Momentum
 
 Setiap fungsi:
     Input  : DataFrame pandas dengan kolom OHLCV standar (Open, High, Low, Close, Volume)
@@ -15,7 +16,7 @@ Setiap fungsi:
 import math
 import pandas as pd
 from ta.momentum import RSIIndicator
-from ta.trend import SMAIndicator
+from ta.trend import SMAIndicator, MACD
 from ta.volatility import BollingerBands
 
 
@@ -45,28 +46,73 @@ def _valid(value):
 
 
 # ─────────────────────────────────────────────────────────────
-# 1. RSI REVERSAL STRATEGY
+# EVALUASI TREN → BATAS RSI DINAMIS
 # ─────────────────────────────────────────────────────────────
 
-def rsi_strategy(df, period=14, oversold=30.0, overbought=70.0):
+def _evaluate_trend_rsi_bounds(df, ma_fast=20, ma_slow=50,
+                                oversold_uptrend=45.0, oversold_downtrend=30.0,
+                                overbought_default=70.0):
     """
-    Strategi RSI Reversal.
+    Menentukan batas oversold RSI secara dinamis berdasarkan tren MA.
+
+    - Uptrend  (MA20 > MA50): oversold dinaikkan ke 45 → lebih mudah BUY.
+    - Downtrend (MA20 < MA50): oversold tetap 30 → lebih konservatif.
+
+    Returns:
+        (oversold, overbought, trend_label)
+    """
+    close = df["Close"]
+    fast = SMAIndicator(close=close, window=ma_fast).sma_indicator()
+    slow = SMAIndicator(close=close, window=ma_slow).sma_indicator()
+
+    fast_now = fast.iloc[-1]
+    slow_now = slow.iloc[-1]
+
+    if _valid(fast_now) and _valid(slow_now) and fast_now > slow_now:
+        return oversold_uptrend, overbought_default, "UPTREND"
+    else:
+        return oversold_downtrend, overbought_default, "DOWNTREND"
+
+
+# ─────────────────────────────────────────────────────────────
+# 1. RSI REVERSAL STRATEGY  (batas dinamis berdasarkan tren)
+# ─────────────────────────────────────────────────────────────
+
+def rsi_strategy(df, period=14, oversold=None, overbought=None):
+    """
+    Strategi RSI Reversal dengan batas oversold/overbought DINAMIS.
+
+    Batas oversold disesuaikan otomatis berdasarkan tren Moving Average:
+        - Uptrend  (MA20 > MA50): oversold = 45 → lebih mudah BUY saat tren naik.
+        - Downtrend (MA20 < MA50): oversold = 30 → standar konservatif.
+
+    Jika oversold/overbought diberikan secara eksplisit, evaluasi tren dilewati.
 
     Logika:
-        BUY  - RSI < oversold DAN rsi[-1] > rsi[-2]  (momentum berbalik naik dari oversold)
-        SELL - RSI > overbought DAN rsi[-1] < rsi[-2] (momentum berbalik turun dari overbought)
+        BUY  - RSI < oversold DAN rsi[-1] > rsi[-2]  (momentum berbalik naik)
+        SELL - RSI > overbought DAN rsi[-1] < rsi[-2] (momentum berbalik turun)
         HOLD - RSI di zona netral atau belum ada konfirmasi pembalikan.
 
     Args:
         df         : DataFrame OHLCV.
         period     : Periode RSI. Default 14.
-        oversold   : Batas bawah zona oversold. Default 30.
-        overbought : Batas atas zona overbought. Default 70.
+        oversold   : Batas bawah zona oversold. None = dinamis berdasarkan tren.
+        overbought : Batas atas zona overbought. None = dinamis (default 70).
 
     Returns:
         (signal, alasan)
     """
-    _validate_df(df, min_rows=period + 2, name="RSI Reversal")
+    _validate_df(df, min_rows=max(period, 50) + 2, name="RSI Reversal")
+
+    # ── Tentukan batas RSI dinamis berdasarkan tren ───────────
+    if oversold is None or overbought is None:
+        dyn_oversold, dyn_overbought, trend = _evaluate_trend_rsi_bounds(df)
+        if oversold is None:
+            oversold = dyn_oversold
+        if overbought is None:
+            overbought = dyn_overbought
+    else:
+        trend = "CUSTOM"
 
     rsi_series = RSIIndicator(close=df["Close"], window=period).rsi()
     rsi_now  = rsi_series.iloc[-1]
@@ -78,16 +124,18 @@ def rsi_strategy(df, period=14, oversold=30.0, overbought=70.0):
             f"(butuh minimal {period + 1} baris)."
         )
 
+    trend_info = f" [Tren: {trend}, Oversold={oversold}, Overbought={overbought}]"
+
     if rsi_now < oversold:
         if rsi_now > rsi_prev:
             return "BUY", (
                 f"RSI Reversal BUY: RSI-{period} ({rsi_now:.2f}) di zona "
                 f"oversold (< {oversold}) dan berbalik naik dari {rsi_prev:.2f}. "
-                f"Potensi reversal ke atas."
+                f"Potensi reversal ke atas.{trend_info}"
             )
         return "HOLD", (
             f"RSI-{period} ({rsi_now:.2f}) di zona oversold tetapi masih turun "
-            f"dari {rsi_prev:.2f}. Tunggu konfirmasi pembalikan."
+            f"dari {rsi_prev:.2f}. Tunggu konfirmasi pembalikan.{trend_info}"
         )
 
     if rsi_now > overbought:
@@ -95,16 +143,16 @@ def rsi_strategy(df, period=14, oversold=30.0, overbought=70.0):
             return "SELL", (
                 f"RSI Reversal SELL: RSI-{period} ({rsi_now:.2f}) di zona "
                 f"overbought (> {overbought}) dan berbalik turun dari {rsi_prev:.2f}. "
-                f"Potensi koreksi ke bawah."
+                f"Potensi koreksi ke bawah.{trend_info}"
             )
         return "HOLD", (
             f"RSI-{period} ({rsi_now:.2f}) di zona overbought tetapi masih naik "
-            f"dari {rsi_prev:.2f}. Tunggu konfirmasi puncak."
+            f"dari {rsi_prev:.2f}. Tunggu konfirmasi puncak.{trend_info}"
         )
 
     return "HOLD", (
         f"RSI-{period} ({rsi_now:.2f}) berada di zona netral "
-        f"({oversold}–{overbought}). Tidak ada sinyal reversal saat ini."
+        f"({oversold}–{overbought}). Tidak ada sinyal reversal saat ini.{trend_info}"
     )
 
 
@@ -183,17 +231,19 @@ def bollinger_strategy(df, period=20, std_dev=2.0):
 # 3. RSI + MOVING AVERAGE STRATEGY
 # ─────────────────────────────────────────────────────────────
 
-def rsi_ma_strategy(df, rsi_period=14, ma_fast=20, ma_slow=50, oversold=40.0, overbought=60.0):
+def rsi_ma_strategy(df, rsi_period=14, ma_fast=20, ma_slow=50, oversold=None, overbought=None):
     """
     Strategi kombinasi RSI + Moving Average (konfirmasi ganda).
+
+    Batas oversold/overbought disesuaikan otomatis berdasarkan tren:
+        - Uptrend  (MA20 > MA50): oversold = 45, overbought = 70
+        - Downtrend (MA20 < MA50): oversold = 30, overbought = 60
 
     Logika:
         BUY  - RSI < oversold (harga relatif murah) DAN
                MA-cepat > MA-lambat (tren jangka pendek naik).
-               Kedua kondisi harus terpenuhi.
         SELL - RSI > overbought (harga relatif mahal) DAN
                MA-cepat < MA-lambat (tren jangka pendek turun).
-               Kedua kondisi harus terpenuhi.
         HOLD - Salah satu atau kedua kondisi tidak terpenuhi.
 
     Args:
@@ -201,8 +251,8 @@ def rsi_ma_strategy(df, rsi_period=14, ma_fast=20, ma_slow=50, oversold=40.0, ov
         rsi_period  : Periode RSI. Default 14.
         ma_fast     : Periode MA cepat. Default 20.
         ma_slow     : Periode MA lambat. Default 50.
-        oversold    : Batas RSI untuk sinyal BUY. Default 40.
-        overbought  : Batas RSI untuk sinyal SELL. Default 60.
+        oversold    : Batas RSI untuk sinyal BUY. None = dinamis.
+        overbought  : Batas RSI untuk sinyal SELL. None = dinamis.
 
     Returns:
         (signal, alasan)
@@ -227,6 +277,13 @@ def rsi_ma_strategy(df, rsi_period=14, ma_fast=20, ma_slow=50, oversold=40.0, ov
 
     uptrend   = fast_now > slow_now
     downtrend = fast_now < slow_now
+
+    # ── Batas RSI dinamis berdasarkan tren ────────────────────
+    if oversold is None:
+        oversold = 45.0 if uptrend else 30.0
+    if overbought is None:
+        overbought = 70.0 if uptrend else 60.0
+    trend_label = "UPTREND" if uptrend else "DOWNTREND"
 
     # BUY: RSI murah + tren naik
     if rsi_now < oversold and uptrend:
@@ -265,18 +322,83 @@ def rsi_ma_strategy(df, rsi_period=14, ma_fast=20, ma_slow=50, oversold=40.0, ov
 
 
 # ─────────────────────────────────────────────────────────────
+# 4. MACD STRATEGY
+# ─────────────────────────────────────────────────────────────
+
+def macd_strategy(df, fast=12, slow=26, signal=9):
+    """
+    Strategi MACD Histogram Momentum.
+
+    Logika:
+        BUY  - Histogram hari ini > Histogram kemarin DAN
+               Histogram kemarin < 0 (pelemahan tren turun mereda,
+               momentum mulai berbalik naik).
+        SELL - Histogram hari ini < Histogram kemarin DAN
+               Histogram kemarin > 0 (momentum bullish melemah).
+        HOLD - Kondisi tidak terpenuhi.
+
+    Args:
+        df     : DataFrame OHLCV.
+        fast   : Periode EMA cepat. Default 12.
+        slow   : Periode EMA lambat. Default 26.
+        signal : Periode signal line. Default 9.
+
+    Returns:
+        (signal_str, alasan)
+    """
+    _validate_df(df, min_rows=slow + signal + 1, name="MACD")
+
+    macd_ind = MACD(
+        close=df["Close"], window_slow=slow, window_fast=fast, window_sign=signal
+    )
+    hist = macd_ind.macd_diff()
+
+    hist_now  = hist.iloc[-1]
+    hist_prev = hist.iloc[-2]
+
+    if not _valid(hist_now) or not _valid(hist_prev):
+        return "HOLD", (
+            f"MACD Histogram belum terbentuk — data terlalu pendek "
+            f"(butuh minimal {slow + signal} baris)."
+        )
+
+    # BUY: histogram naik dari bawah nol
+    if hist_now > hist_prev and hist_prev < 0:
+        return "BUY", (
+            f"MACD BUY: Histogram naik ({hist_prev:.4f} → {hist_now:.4f}), "
+            f"momentum bearish mereda. Potensi reversal bullish."
+        )
+
+    # SELL: histogram turun dari atas nol
+    if hist_now < hist_prev and hist_prev > 0:
+        return "SELL", (
+            f"MACD SELL: Histogram turun ({hist_prev:.4f} → {hist_now:.4f}), "
+            f"momentum bullish melemah. Potensi koreksi."
+        )
+
+    # HOLD
+    direction = "naik" if hist_now > hist_prev else "turun" if hist_now < hist_prev else "flat"
+    zone = "positif" if hist_now > 0 else "negatif" if hist_now < 0 else "nol"
+    return "HOLD", (
+        f"MACD HOLD: Histogram {direction} ({hist_prev:.4f} → {hist_now:.4f}), "
+        f"zona {zone}. Belum ada konfirmasi sinyal."
+    )
+
+
+# ─────────────────────────────────────────────────────────────
 # JALANKAN SEMUA STRATEGI SEKALIGUS
 # ─────────────────────────────────────────────────────────────
 
 def run_all_strategies(df):
     """
-    Jalankan ketiga strategi sekaligus.
+    Jalankan semua strategi sekaligus.
 
     Returns:
         {
             "rsi":       {"signal": ..., "alasan": ...},
             "bollinger": {"signal": ..., "alasan": ...},
             "rsi_ma":    {"signal": ..., "alasan": ...},
+            "macd":      {"signal": ..., "alasan": ...},
         }
     """
     results = {}
@@ -284,6 +406,7 @@ def run_all_strategies(df):
         ("rsi",       rsi_strategy),
         ("bollinger", bollinger_strategy),
         ("rsi_ma",    rsi_ma_strategy),
+        ("macd",      macd_strategy),
     ]:
         try:
             signal, alasan = func(df)
@@ -297,84 +420,50 @@ def run_all_strategies(df):
 # MULTI-STRATEGY CONFIRMATION
 # ─────────────────────────────────────────────────────────────
 
-def multi_strategy_confirmation(df):
+def multi_strategy_confirmation(df, smart_money=False, gap_up=False, gap_confidence="LOW"):
     """
-    Jalankan semua strategi dan hitung konsensus sinyal BUY/SELL.
+    Jalankan semua strategi, gabungkan dengan status Smart Money dan Gap Up,
+    lalu hitung total votes BUY/SELL.
 
-    Logika BUY:
-        >= 2 BUY  -> "STRONG BUY"  + bonus score +2
-           1 BUY  -> "WEAK BUY"    + bonus score +1
-           0 BUY  -> "HOLD"
+    File ini hanya mengeluarkan data mentah (votes dan status) —
+    penentuan sinyal akhir (BUY/SELL) dilakukan di tahap scoring.
 
-    Logika SELL (simetris):
-        >= 2 SELL -> "STRONG SELL" + bonus score +2
-           1 SELL -> "WEAK SELL"   + bonus score +1
+    Args:
+        df             : DataFrame OHLCV.
+        smart_money    : bool — apakah ada indikasi smart money.
+        gap_up         : bool — apakah terjadi gap up.
+        gap_confidence : str  — tingkat confidence gap (LOW/MEDIUM/HIGH).
 
     Returns:
         {
-            "signal":      str,   # STRONG BUY / WEAK BUY / HOLD / WEAK SELL / STRONG SELL
-            "score_bonus": int,   # tambahan poin untuk scoring utama
-            "buy_count":   int,
-            "sell_count":  int,
-            "details":     dict,  # hasil per strategi
-            "alasan":      str,
+            "total_buy_votes":    int,
+            "total_sell_votes":   int,
+            "smart_money_status": bool,
+            "gap_up_status":      {"detected": bool, "confidence": str},
+            "details":            dict,  # hasil per strategi teknikal
         }
     """
     details = run_all_strategies(df)
 
     buy_count  = sum(1 for v in details.values() if v["signal"] == "BUY")
     sell_count = sum(1 for v in details.values() if v["signal"] == "SELL")
-    total      = len(details)
 
-    # Kumpulkan nama strategi yang BUY / SELL
-    labels = {"rsi": "RSI Reversal", "bollinger": "Bollinger Bands", "rsi_ma": "RSI+MA"}
-    buy_names  = [labels.get(k, k) for k, v in details.items() if v["signal"] == "BUY"]
-    sell_names = [labels.get(k, k) for k, v in details.items() if v["signal"] == "SELL"]
+    # Smart Money sebagai voter tambahan untuk BUY
+    if smart_money:
+        buy_count += 1
 
-    # ── Tentukan sinyal akhir & bonus score ───────────────────
-    if buy_count >= 2:
-        signal       = "STRONG BUY"
-        score_bonus  = 2
-        alasan = (
-            f"Multi-Confirmation STRONG BUY: {buy_count}/{total} strategi setuju BUY "
-            f"({', '.join(buy_names)}). Bonus score +{score_bonus}."
-        )
-    elif buy_count == 1:
-        signal       = "WEAK BUY"
-        score_bonus  = 1
-        alasan = (
-            f"Multi-Confirmation WEAK BUY: {buy_count}/{total} strategi sinyal BUY "
-            f"({', '.join(buy_names)}). Konfirmasi belum cukup kuat. Bonus score +{score_bonus}."
-        )
-    elif sell_count >= 2:
-        signal       = "STRONG SELL"
-        score_bonus  = 2
-        alasan = (
-            f"Multi-Confirmation STRONG SELL: {sell_count}/{total} strategi setuju SELL "
-            f"({', '.join(sell_names)}). Bonus score +{score_bonus}."
-        )
-    elif sell_count == 1:
-        signal       = "WEAK SELL"
-        score_bonus  = 1
-        alasan = (
-            f"Multi-Confirmation WEAK SELL: {sell_count}/{total} strategi sinyal SELL "
-            f"({', '.join(sell_names)}). Konfirmasi belum cukup kuat. Bonus score +{score_bonus}."
-        )
-    else:
-        signal       = "HOLD"
-        score_bonus  = 0
-        alasan = (
-            f"Multi-Confirmation HOLD: Tidak ada strategi yang memberikan sinyal "
-            f"BUY maupun SELL ({total} strategi dievaluasi)."
-        )
+    # Gap Up sebagai voter tambahan (hanya jika confidence MEDIUM/HIGH)
+    gap_conf_upper = str(gap_confidence).upper()
+    gap_ok = gap_conf_upper in {"MEDIUM", "HIGH"}
+    if gap_up and gap_ok:
+        buy_count += 1
 
     return {
-        "signal":      signal,
-        "score_bonus": score_bonus,
-        "buy_count":   buy_count,
-        "sell_count":  sell_count,
-        "details":     details,
-        "alasan":      alasan,
+        "total_buy_votes":    buy_count,
+        "total_sell_votes":   sell_count,
+        "smart_money_status": smart_money,
+        "gap_up_status":      {"detected": gap_up, "confidence": gap_conf_upper},
+        "details":            details,
     }
 
 
@@ -414,13 +503,12 @@ if __name__ == "__main__":
             # ── Multi-Strategy Confirmation ───────────────────────
             conf = multi_strategy_confirmation(df)
             print(f"\n  {'═'*50}")
-            print(f"  MULTI-STRATEGY CONFIRMATION")
+            print(f"  MULTI-STRATEGY CONFIRMATION (Raw Data)")
             print(f"  {'═'*50}")
-            print(f"  Signal Final : {conf['signal']}")
-            print(f"  BUY count    : {conf['buy_count']}/{len(conf['details'])}")
-            print(f"  SELL count   : {conf['sell_count']}/{len(conf['details'])}")
-            print(f"  Score Bonus  : +{conf['score_bonus']}")
-            print(f"  Alasan       : {conf['alasan']}")
+            print(f"  Total BUY votes  : {conf['total_buy_votes']}")
+            print(f"  Total SELL votes  : {conf['total_sell_votes']}")
+            print(f"  Smart Money       : {conf['smart_money_status']}")
+            print(f"  Gap Up            : {conf['gap_up_status']}")
             print(f"\n{'='*55}\n")
 
     except ImportError:

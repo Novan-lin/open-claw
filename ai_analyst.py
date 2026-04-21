@@ -555,10 +555,36 @@ Tulis dalam bahasa Indonesia, format ringkas:
 
 Jawab SINGKAT dan PADAT. Maksimal 5 paragraf pendek."""
 
-    # Analisa fundamental via Groq
+    # Analisa fundamental via Groq (jika gagal → fallback ke Ollama Mistral)
     print(f"[AI] Menganalisa fundamental {clean_ticker} via Groq (llama-3.3-70b)...")
     gemini_fundamental = _call_groq(gemini_fundamental_prompt, timeout=30)
     fundamental_source = "Groq (Llama 3.3 70B)"
+
+    # Fallback fundamental ke Ollama jika Groq gagal (token habis / rate limit)
+    if not gemini_fundamental:
+        print(f"[AI] Groq gagal. Fallback fundamental ke Ollama Mistral...")
+        try:
+            url = "http://localhost:11434/api/generate"
+            payload = {
+                "model": "mistral",
+                "prompt": gemini_fundamental_prompt,
+                "stream": False,
+                "options": {
+                    "num_predict": 1024,
+                    "temperature": 0.5,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1,
+                }
+            }
+            resp = requests.post(url, json=payload, timeout=90)
+            resp.raise_for_status()
+            ollama_fund = resp.json().get("response", "").strip()
+            if ollama_fund:
+                gemini_fundamental = ollama_fund
+                fundamental_source = "Ollama Mistral (fallback)"
+                print(f"[AI] Fundamental via Ollama Mistral berhasil.")
+        except Exception as e:
+            print(f"[AI] Ollama fundamental juga gagal: {e}")
 
     # === BAGIAN B: Analisa Teknikal via Mistral (lokal) ===
     teknikal_prompt = f"""Kamu adalah analis saham teknikal profesional Indonesia yang sangat berpengalaman.
@@ -621,22 +647,25 @@ INGAT: Tulis PANJANG dan DETAIL. Minimal 3 paragraf besar. Jangan pernah meringk
             "prompt": teknikal_prompt,
             "stream": False,
             "options": {
-                "num_predict": 4096,
+                "num_predict": 1024,
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "repeat_penalty": 1.1,
             }
         }
-        response = requests.post(url, json=payload, timeout=180)
+        response = requests.post(url, json=payload, timeout=90)
         response.raise_for_status()
         data = response.json()
         teknikal_result = data.get("response", "").strip()
     except requests.exceptions.ConnectionError:
-        teknikal_result = "Analisis teknikal gagal: Tidak dapat menghubungi Ollama (localhost:11434)."
+        teknikal_result = None
+        print("[AI] Ollama tidak tersedia, skip analisis teknikal.")
     except requests.exceptions.Timeout:
-        teknikal_result = "Analisis teknikal gagal: Timeout (>180 detik)."
+        teknikal_result = None
+        print("[AI] Ollama timeout (>90s), skip analisis teknikal.")
     except Exception as e:
-        teknikal_result = f"Analisis teknikal gagal: {str(e)}"
+        teknikal_result = None
+        print(f"[AI] Ollama error: {e}, skip analisis teknikal.")
 
     # === GABUNGKAN HASIL ===
     parts = []

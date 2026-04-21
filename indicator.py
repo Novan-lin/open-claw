@@ -1,6 +1,7 @@
 import pandas as pd
 from ta.momentum import RSIIndicator
-from ta.trend import SMAIndicator
+from ta.trend import SMAIndicator, MACD
+from ta.volatility import AverageTrueRange
 
 def calculate_indicators(df, rsi_period: int = 14, ma_short: int = 20, ma_long: int = 50):
     """
@@ -32,7 +33,23 @@ def calculate_indicators(df, rsi_period: int = 14, ma_short: int = 20, ma_long: 
         # Menghitung Simple Moving Average (MA long)
         ma50_indicator = SMAIndicator(close=df_copy['Close'], window=ma_long)
         df_copy['MA50'] = ma50_indicator.sma_indicator()
-        
+
+        # Menghitung ATR (Average True Range) periode 14
+        atr_indicator = AverageTrueRange(
+            high=df_copy['High'], low=df_copy['Low'], close=df_copy['Close'], window=14
+        )
+        df_copy['ATR'] = atr_indicator.average_true_range()
+
+        # Menghitung MACD (12, 26, 9)
+        macd_indicator = MACD(close=df_copy['Close'], window_slow=26, window_fast=12, window_sign=9)
+        df_copy['MACD']      = macd_indicator.macd()
+        df_copy['MACD_Signal'] = macd_indicator.macd_signal()
+        df_copy['MACD_Hist'] = macd_indicator.macd_diff()
+
+        # Support & Resistance dinamis (Rolling 20 hari)
+        df_copy['Support_20']    = df_copy['Low'].rolling(window=20, min_periods=1).min()
+        df_copy['Resistance_20'] = df_copy['High'].rolling(window=20, min_periods=1).max()
+
         # Ambil data hari terakhir
         latest_data = df_copy.iloc[-1]
         
@@ -41,7 +58,13 @@ def calculate_indicators(df, rsi_period: int = 14, ma_short: int = 20, ma_long: 
             'rsi': latest_data['RSI'],
             'ma20': latest_data['MA20'],
             'ma50': latest_data['MA50'],
-            'close_price': latest_data['Close']
+            'close_price': latest_data['Close'],
+            'atr': latest_data['ATR'],
+            'macd': latest_data['MACD'],
+            'macd_signal': latest_data['MACD_Signal'],
+            'macd_hist': latest_data['MACD_Hist'],
+            'support_20': latest_data['Support_20'],
+            'resistance_20': latest_data['Resistance_20'],
         }
         
         # Print hasil sesuai kriteria
@@ -53,10 +76,20 @@ def calculate_indicators(df, rsi_period: int = 14, ma_short: int = 20, ma_long: 
         rsi_str  = f"{result['rsi']:.2f}"  if pd.notna(result['rsi'])  else f"Data tidak cukup (butuh > {rsi_period} hari)"
         ma20_str = f"{result['ma20']:.2f}" if pd.notna(result['ma20']) else f"Data tidak cukup (butuh > {ma_short} hari)"
         ma50_str = f"{result['ma50']:.2f}" if pd.notna(result['ma50']) else f"Data tidak cukup (butuh > {ma_long} hari)"
+        atr_str  = f"{result['atr']:.2f}"  if pd.notna(result['atr'])  else "Data tidak cukup (butuh > 14 hari)"
+        macd_str = f"{result['macd']:.2f}" if pd.notna(result['macd']) else "Data tidak cukup (butuh > 26 hari)"
+        macd_h_str = f"{result['macd_hist']:.2f}" if pd.notna(result['macd_hist']) else "Data tidak cukup"
+        sup_str  = f"{result['support_20']:.2f}" if pd.notna(result['support_20']) else "N/A"
+        res_str  = f"{result['resistance_20']:.2f}" if pd.notna(result['resistance_20']) else "N/A"
         
         print(f"RSI ({rsi_period})                : {rsi_str}")
         print(f"MA ({ma_short})                 : {ma20_str}")
         print(f"MA ({ma_long})                 : {ma50_str}")
+        print(f"ATR (14)               : {atr_str}")
+        print(f"MACD                   : {macd_str}")
+        print(f"MACD Histogram         : {macd_h_str}")
+        print(f"Support (20)           : {sup_str}")
+        print(f"Resistance (20)        : {res_str}")
         print("-" * 50)
         
         return result

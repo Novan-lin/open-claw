@@ -19,7 +19,6 @@ Cara pakai:
 
 import sys
 import math
-import importlib.util
 from datetime import datetime, timezone, timedelta
 
 import pandas as pd
@@ -27,13 +26,9 @@ import yfinance as yf
 from ta.momentum import RSIIndicator
 from ta.trend import SMAIndicator
 
-# ── Muat signal.py secara dinamis (hindari konflik dengan modul bawaan) ──
-spec = importlib.util.spec_from_file_location("local_signal", "signal.py")
-local_signal = importlib.util.module_from_spec(spec)
-sys.modules["local_signal"] = local_signal
-spec.loader.exec_module(local_signal)
-generate_signal_raw = local_signal.generate_signal
-
+from scoring import calculate_score
+from strategies import multi_strategy_confirmation
+from entry_plan import validate_rrr
 from volume_analysis import analyze_volume
 from gap_detector import detect_gap
 
@@ -72,26 +67,38 @@ def _calc_indicators_silent(
 
 def _generate_signal_silent(
     rsi, ma_short_val, ma_long_val, harga,
-    smart_money=False, gap_confidence="LOW",
+    smart_money=False, gap_confidence="LOW", df_slice=None, atr=None
 ) -> str:
     """
-    Tentukan sinyal BUY/SELL/HOLD tanpa print ke terminal.
-    Menggunakan logika yang sama dengan signal.py.
+    Tentukan sinyal BUY/SELL/HOLD menggunakan Signal Engine terbaru.
+    Menggunakan scoring.py + strategies.py + entry_plan.py.
     """
     if rsi is None or math.isnan(rsi):
         return "HOLD"
-    if rsi > 70:
-        return "SELL"
 
-    valid_ma = (
-        ma_short_val is not None and ma_long_val is not None
-        and not math.isnan(ma_short_val) and not math.isnan(ma_long_val)
-    )
     gap_ok = str(gap_confidence).upper() in {"MEDIUM", "HIGH"}
-    if 35 <= rsi <= 60 and valid_ma and ma_short_val > ma_long_val and smart_money and gap_ok:
-        return "BUY"
 
-    return "HOLD"
+    try:
+        mc = multi_strategy_confirmation(
+            df_slice,
+            smart_money=smart_money,
+            gap_up=gap_ok,
+            gap_confidence=gap_confidence,
+        )
+    except Exception:
+        mc = None
+
+    rrr_data = validate_rrr(float(harga), None, None)
+
+    signal_status, _, _ = calculate_score(
+        rsi, ma_short_val, ma_long_val, harga,
+        volume_label="AKUMULASI" if smart_money else "NORMAL",
+        mc_data=mc,
+        mode="STRICT",
+        atr=atr,
+        rrr_data=rrr_data,
+    )
+    return signal_status
 
 
 def _analyze_volume_silent(df_slice: pd.DataFrame):
@@ -218,7 +225,7 @@ def run_backtest(
                                               smart_money)
 
         # ── Tentukan sinyal ──
-        signal = _generate_signal_silent(rsi, ma20, ma50, harga, smart_money, gap_conf)
+        signal = _generate_signal_silent(rsi, ma20, ma50, harga, smart_money, gap_conf, df_slice=df_slice)
 
         # ── Eksekusi trade jika BUY ──
         if signal == "BUY":

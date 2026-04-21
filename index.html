@@ -388,6 +388,27 @@
     /* OFF state */
     .sm-off, .gu-off { opacity: 0.45; }
 
+    /* Gate Decision Badge */
+    .gate-execute {
+      background: rgba(0,217,126,0.12);
+      border-color: rgba(0,217,126,0.4);
+      color: var(--buy);
+    }
+    .gate-execute strong { color: var(--buy); }
+    .gate-wait {
+      background: rgba(245,197,24,0.12);
+      border-color: rgba(245,197,24,0.4);
+      color: #f5c518;
+    }
+    .gate-wait strong { color: #f5c518; }
+    .gate-skip {
+      background: rgba(255,59,48,0.12);
+      border-color: rgba(255,59,48,0.4);
+      color: var(--sell);
+    }
+    .gate-skip strong { color: var(--sell); }
+    .gate-none { opacity: 0.45; }
+
 
     /* ====== DIVIDER ====== */
     .card-divider { height: 1px; background: var(--border); margin: 0 22px; }
@@ -1095,6 +1116,7 @@
       <span class="logo-text">Stock Analyzer</span>
     </div>
     <div class="header-right">
+      <button id="rescan-btn" onclick="forceRescan()" title="Paksa scan ulang semua saham" style="background:#f59e0b;color:#000;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;margin-right:8px;">🔄 Rescan</button>
       <div id="refresh-wrap" title="Refresh setiap 10 detik">
         <svg class="ring-svg" width="20" height="20" viewBox="0 0 20 20">
           <circle class="ring-bg" cx="10" cy="10" r="8"/>
@@ -1470,7 +1492,7 @@
           <div class="modal-section-title">Indikator Teknikal</div>
           <div class="modal-grid">
             <div class="modal-stat"><span class="label">Harga (Close)</span><span class="value">${formatPrice(s.harga ?? s.price)}</span></div>
-            <div class="modal-stat"><span class="label">Score</span><span class="value" style="color:${score >= 6 ? 'var(--buy)' : score >= 4 ? '#f59e0b' : 'var(--text-muted)'}">${score} / 8</span></div>
+            <div class="modal-stat"><span class="label">Score</span><span class="value" style="color:${score >= 6 ? 'var(--buy)' : score >= 4 ? '#f59e0b' : 'var(--text-muted)'}">${score} / 10</span></div>
             <div class="modal-stat"><span class="label">RSI (14)</span><span class="value" style="color:${rsi > 70 ? 'var(--sell)' : rsi < 30 ? 'var(--buy)' : 'var(--text)'}">${rsi} ${rsi > 70 ? '⚠️ Overbought' : rsi < 30 ? '✅ Oversold' : ''}</span></div>
             <div class="modal-stat"><span class="label">MA20 (SMA)</span><span class="value">${ma20}</span></div>
             <div class="modal-stat"><span class="label">MA50 (SMA)</span><span class="value">${ma50}</span></div>
@@ -1496,6 +1518,18 @@
         </div>` : ''}
 
         ${buildMtfSection(s)}
+
+        ${(() => {
+          const gate = s.gate;
+          if (!gate) return '';
+          const d = gate.decision || '—';
+          const icon = d === 'EXECUTE' ? '✅' : d === 'WAIT' ? '⏳' : '🚫';
+          const reasons = (gate.alasan || []).map(a => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${a}</div>`).join('');
+          return `<div class="modal-section">
+            <div class="modal-section-title">${icon} Final Gate: ${d}</div>
+            <div class="modal-ai-text">${reasons || 'Tidak ada detail'}</div>
+          </div>`;
+        })()}
 
         <div class="modal-section">
           <div class="modal-section-title">🤖 Analisa AI</div>
@@ -1630,7 +1664,7 @@
       <div class="analysis-hero">
         <span class="analysis-hero-price">${formatPrice(hargaV)}</span>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:13px;color:${score >= 6 ? 'var(--buy)' : score >= 4 ? '#f59e0b' : 'var(--text-muted)'};font-weight:700;font-family:'JetBrains Mono',monospace;">Score ${score}/8</span>
+          <span style="font-size:13px;color:${score >= 6 ? 'var(--buy)' : score >= 4 ? '#f59e0b' : 'var(--text-muted)'};font-weight:700;font-family:'JetBrains Mono',monospace;">Score ${score}/10</span>
           ${sm ? '<span style="font-size:12px;color:var(--gold);font-weight:600;">🔥 Smart Money</span>' : ''}
           ${gap ? '<span style="font-size:12px;color:var(--buy);font-weight:600;">🚀 Gap Up</span>' : ''}
         </div>
@@ -1671,6 +1705,18 @@
 
       ${smSection}
       ${mtfSection}
+
+      ${(() => {
+        const gate = s.gate;
+        if (!gate) return '';
+        const d = gate.decision || '—';
+        const icon = d === 'EXECUTE' ? '✅' : d === 'WAIT' ? '⏳' : '🚫';
+        const reasons = (gate.alasan || []).map(a => `<div style="padding:6px 0;border-bottom:1px solid var(--border);">${a}</div>`).join('');
+        return `<div class="analysis-section">
+          <div class="analysis-section-title">${icon} Final Gate: ${d}</div>
+          ${reasons || '<p>Tidak ada detail</p>'}
+        </div>`;
+      })()}
     `;
 
     // Show page
@@ -1717,8 +1763,8 @@
       return;
     }
 
-    // Batasi top 5 kecuali _showAll
-    const display = _showAll ? filtered : filtered.slice(0, 5);
+    // Tampilkan semua saham
+    const display = filtered;
 
     const RANK_MEDALS  = ['🥇', '🥈', '🥉', '🏅', '🏅'];
     const RANK_LABELS  = ['#1 Terbaik', '#2', '#3', '#4', '#5'];
@@ -1734,6 +1780,9 @@
       const rsiClass = rsiVal != null ? (rsiVal > 70 ? 'rsi-ob' : rsiVal < 30 ? 'rsi-os' : 'rsi-neutral') : '';
       const ma20    = s._meta?.ma20 != null ? Number(s._meta.ma20).toFixed(0) : '—';
       const ma50    = s._meta?.ma50 != null ? Number(s._meta.ma50).toFixed(0) : '—';
+      const atr     = s._meta?.atr  != null ? Number(s._meta.atr).toFixed(2) : '—';
+      const macdStratSig  = s._meta?.strategy_details?.macd?.signal || null;
+      const bollStratSig  = s._meta?.strategy_details?.bollinger?.signal || null;
       const score   = s.score ?? 0;
       const ai      = s.ai_analysis || s.ai || '—';
       const smLabel = s._meta?.volume_label || (sm ? 'AKTIF' : '');
@@ -1772,12 +1821,25 @@
       const medal    = RANK_MEDALS[i]  || '🏅';
       const rankLbl  = RANK_LABELS[i]  || `#${i+1}`;
 
-      // Score bar (maks 8)
-      const scorePct = Math.min(100, Math.round((score / 8) * 100));
+      // Score bar (maks 10)
+      const scorePct = Math.min(100, Math.round((score / 10) * 100));
       const scoreColor = score >= 6 ? '#00d97e' : score >= 4 ? '#f59e0b' : '#64748b';
 
       // Signal CSS class
       const sigClass = sig === 'BUY' ? 'BUY' : sig === 'SELL' ? 'SELL' : 'HOLD';
+
+      // RRR data
+      const rrr     = s.rrr || {};
+      const rrrVal  = rrr.rrr != null ? Number(rrr.rrr).toFixed(2) : null;
+      const rrrFlag = rrr.flag || '';
+      const sup20   = s._meta?.support_20 != null ? Number(s._meta.support_20).toFixed(0) : '—';
+      const res20   = s._meta?.resistance_20 != null ? Number(s._meta.resistance_20).toFixed(0) : '—';
+      const rrrColor = rrrFlag === 'BAD_RRR' ? 'var(--sell)' : rrrVal && Number(rrrVal) > 2.0 ? 'var(--buy)' : 'var(--text)';
+      const rrrBadgeHTML = rrrVal ? `
+          <div class="metric-chip" style="border-color: ${rrrFlag === 'BAD_RRR' ? 'var(--sell)' : rrrVal > 2.0 ? 'var(--buy)' : 'var(--border-2)'}">
+            <span class="label">RRR</span>
+            <span class="value" style="color:${rrrColor}">${rrrVal}${rrrFlag === 'BAD_RRR' ? ' ⚠️' : rrrVal > 2.0 ? ' ✅' : ''}</span>
+          </div>` : '';
 
       // Trade plan preview (compact — detail di modal)
       const planPreview = hasTradePlan(s) ? `
@@ -1785,6 +1847,10 @@
           <span>Entry ${formatPrice(s.entry)}</span>
           <span style="color:var(--buy)">TP ${formatPrice(s.tp)}</span>
           <span style="color:var(--sell)">SL ${formatPrice(s.sl)}</span>
+        </div>
+        <div style="padding:3px 22px 0;display:flex;gap:12px;font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">
+          <span>S20 ${sup20}</span>
+          <span>R20 ${res20}</span>
         </div>` : '';
 
       return `
@@ -1810,7 +1876,7 @@
           <div class="score-bar-track">
             <div class="score-bar-fill" style="width:${scorePct}%;background:${scoreColor}"></div>
           </div>
-          <span class="score-bar-label">Score <strong>${score}</strong>/8</span>
+          <span class="score-bar-label">Score <strong>${score}</strong>/10</span>
         </div>
 
         <!-- METRICS ROW -->
@@ -1827,6 +1893,23 @@
             <span class="label">MA50</span>
             <span class="value">${ma50}</span>
           </div>
+          <div class="metric-chip">
+            <span class="label">ATR</span>
+            <span class="value">${atr}</span>
+          </div>
+          ${macdStratSig ? `<div class="metric-chip" style="border-color:${macdStratSig==='BUY'?'var(--buy)':macdStratSig==='SELL'?'var(--sell)':'var(--border)'};">
+            <span class="label">MACD</span>
+            <span class="value" style="color:${macdStratSig==='BUY'?'var(--buy)':macdStratSig==='SELL'?'var(--sell)':'var(--text-muted)'}">${macdStratSig}</span>
+          </div>` : ''}
+          ${bollStratSig ? `<div class="metric-chip" style="border-color:${bollStratSig==='BUY'?'var(--buy)':bollStratSig==='SELL'?'var(--sell)':'var(--border)'};">
+            <span class="label">Bollinger</span>
+            <span class="value" style="color:${bollStratSig==='BUY'?'var(--buy)':bollStratSig==='SELL'?'var(--sell)':'var(--text-muted)'}">${bollStratSig}</span>
+          </div>` : ''}
+          <div class="metric-chip" style="border-color: var(--accent);">
+            <span class="label">Strategi</span>
+            <span class="value" style="color: var(--accent);">${s.multi_confirmation || 'N/A'}</span>
+          </div>
+          ${rrrBadgeHTML}
 
           <!-- Smart Money badge -->
           <div class="badge-feature ${sm ? 'sm-on' : 'sm-off'}">
@@ -1846,6 +1929,16 @@
 
           <!-- MTF badge -->
           ${mtfBadgeHTML}
+
+          <!-- Gate Decision badge -->
+          ${(() => {
+            const gate = s.gate;
+            if (!gate || !gate.decision) return `<div class="badge-feature gate-none"><span class="feat-off">— Final Gate</span></div>`;
+            const d = gate.decision;
+            const icon = d === 'EXECUTE' ? '✅' : d === 'WAIT' ? '⏳' : '🚫';
+            const cls = d === 'EXECUTE' ? 'gate-execute' : d === 'WAIT' ? 'gate-wait' : 'gate-skip';
+            return `<div class="badge-feature ${cls}">${icon} <strong>${d}</strong></div>`;
+          })()}
         </div>
 
         <!-- REASON TAGS -->
@@ -1870,13 +1963,6 @@
         </div>
       </article>`;
     }).join('');
-
-    // Tampilkan info jumlah jika ada lebih dari yang ditampilkan
-    if (!_showAll && filtered.length > 5) {
-      grid.innerHTML += `<div class="state-block" style="padding:24px;">
-        <p style="font-size:13px;">Menampilkan <strong>5</strong> dari <strong>${filtered.length}</strong> saham. <a href="#" onclick="event.preventDefault();toggleShowAll()" style="color:var(--accent);text-decoration:none;font-weight:600;">Lihat semua →</a></p>
-      </div>`;
-    }
   }
 
   function updateStats(signals) {
@@ -1891,6 +1977,29 @@
     document.getElementById('stat-sell').textContent  = sell;
     document.getElementById('stat-sm').textContent    = sm;
     document.getElementById('stat-gap').textContent   = gap;
+  }
+
+  async function forceRescan() {
+    const btn = document.getElementById('rescan-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Scanning...';
+    btn.style.background = '#6b7280';
+    try {
+      const res = await fetch('/rescan', { method: 'POST' });
+      const data = await res.json();
+      if (data.status === 'started') {
+        setStatus('loading', 'Rescan dimulai...');
+      } else {
+        alert(data.message || 'Rescan gagal');
+      }
+    } catch (e) {
+      alert('Gagal memulai rescan: ' + e.message);
+    }
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '🔄 Rescan';
+      btn.style.background = '#f59e0b';
+    }, 30000);
   }
 
   async function fetchSignals() {
